@@ -315,6 +315,35 @@ def read_ally_orbs(screenshot: np.ndarray) -> list[int] | None:
     return counts
 
 
+# Offset del slot de Tristan (4ta posición) respecto al slot 0, el mismo que
+# tenía la formación de 4 antes de excluirlo del carrusel. Tristan no
+# participa de ``read_ally_orbs``, pero la función "Seguro" de
+# canopus_fighting_strategies.py necesita poder leer su barra de orbes por
+# separado para decidir si usar su ulti como comodín.
+_TRISTAN_OFFSET = (381, 24)
+
+
+def read_tristan_orbs(screenshot: np.ndarray) -> int | None:
+    """Orbes de Tristan (0-5), leídos aparte de ``read_ally_orbs``.
+
+    Reutiliza la formación de 3 ya resuelta (el slot 0 da el origen) y le
+    suma el offset fijo de Tristan. None si no se pudo ubicar la formación.
+    """
+    screenshot = _normalize_scale(screenshot)
+    hsv = cv2.cvtColor(screenshot, cv2.COLOR_BGR2HSV)
+    cands = _candidate_bars(hsv)
+    if len(cands) < _MIN_BARS_SUPPORT:
+        return None
+
+    bars = _match_formation(cands)
+    if bars is None:
+        return None
+
+    origin_x, origin_y, _w, std_h = bars[0]
+    tristan_bar = (origin_x + _TRISTAN_OFFSET[0], origin_y + _TRISTAN_OFFSET[1], _STD_BAR_W, std_h)
+    return _count_orbs(hsv, tristan_bar)
+
+
 def debug_annotate(screenshot: np.ndarray) -> tuple[np.ndarray, list, tuple | None, list[int] | None]:
     """Herramienta de calibración: devuelve la imagen anotada y los datos crudos.
 

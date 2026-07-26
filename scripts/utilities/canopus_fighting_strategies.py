@@ -138,6 +138,13 @@ class CanopusCarouselStrategy(IBattleStrategy):
         # [(personaje, cartas_pendientes), ...] cuando el turno anterior no pudo
         # confirmar su ultimate; lo consume la función "Seguro" (_try_seguro).
         self._pending_recovery: list[tuple[str, int]] | None = None
+        # True cuando el turno actual quedó con slots sin llenar porque no
+        # hubo un movimiento seguro para completarlos (ver _ensure_turn_finished).
+        # El fighter puede volver a llamar a execute_turn() creyendo que es un
+        # turno nuevo cuando en realidad seguimos atascados en el mismo; en
+        # ese caso hay que evitar repetir todo el guion (reclickear el
+        # talento, replanear A/B/C) y solo reintentar completar los slots.
+        self._turn_pending_fill = False
 
     # ── Verificaciones ──
 
@@ -277,19 +284,37 @@ class CanopusCarouselStrategy(IBattleStrategy):
         return True
 
     def _pick_move_target(self, snapshot, origin_pos: int) -> Card | None:
-        """Carta ocupada más cercana al origen; evita merges (mismo personaje y rango) si puede."""
+        """Carta ocupada más cercana al origen para soltar la carta que se mueve.
+
+        Evita dos cosas, en orden de prioridad:
+        1. La ulti lista de CUALQUIER personaje (propio o no). Soltar una
+           carta encima de una ultimate lista puede jugarla/gastarla sin
+           querer, fuera del control de ``_play_ult`` (visto en vivo: DK
+           tenía 5 orbes y su ulti en mano, y quedó en 0 orbes en medio de un
+           Turno C que ni siquiera juega ultimates).
+        2. Si puede, evita también un posible merge (mismo personaje y rango
+           que la carta que se mueve): es reversible, así que se acepta ese
+           riesgo antes que quedarse sin mover, pero la ulti lista NUNCA se
+           usa como objetivo, pase lo que pase.
+        """
         origin_idx, origin_card, origin_char, _tpl, _s = snapshot[origin_pos]
         candidates = sorted(
             (item for pos, item in enumerate(snapshot) if pos != origin_pos),
             key=lambda item: abs(item[0] - origin_idx),
         )
-        for _idx, card, char, _tpl2, _s2 in candidates:
+        non_ult = [
+            item
+            for item in candidates
+            if not (item[2] is not None and item[3] == ULT_TEMPLATES.get(item[2]))
+        ]
+        for _idx, card, char, _tpl2, _s2 in non_ult:
             if char == origin_char and card.card_rank == origin_card.card_rank:
                 # Posible merge (mismo personaje y rango): probar otro objetivo
                 continue
             return card
-        # Sin objetivo "seguro": usar el más cercano de todas formas
-        return candidates[0][1] if candidates else None
+        # Sin objetivo "seguro" que evite un merge: usar el más cercano que no
+        # sea una ulti lista, si hay alguno.
+        return non_ult[0][1] if non_ult else None
 
     def _move_char_cards(self, char: str, times: int) -> int:
         """Mueve hasta ``times`` cartas del personaje dado, verificando cada una.
@@ -693,6 +718,18 @@ class CanopusCarouselStrategy(IBattleStrategy):
         """Ejecuta un turno completo del carrusel (llamado por el fighter con cartas en mano)."""
         wait_if_paused()
 
+        if self._turn_pending_fill:
+            # No es un turno nuevo: el anterior quedó con slots sin llenar (a
+            # propósito, para no arriesgar un movimiento) y el fighter volvió
+            # a llamar acá porque todavía ve slots vacíos. Repetir todo el
+            # guion (reclickear el talento, replanear A/B/C) sería repetir
+            # trabajo ya hecho y arriesgar acciones de más; solo reintentamos
+            # completar lo que falte.
+            print("Turno todavía sin completar; reintento solo llenar los slots que faltan.")
+            self._ensure_turn_finished()
+            self._turn_pending_fill = self._empty_slots() > 0
+            return
+
         # VERIFICACIÓN 1: estado del talento de DK
         screenshot, _ = capture_window()
         metrics = read_dk_talent_metrics(screenshot)
@@ -714,6 +751,7 @@ class CanopusCarouselStrategy(IBattleStrategy):
         # normal A/B/C de este turno.
         if self._try_seguro():
             self._ensure_turn_finished()
+            self._turn_pending_fill = self._empty_slots() > 0
             return
 
         stage = self._classify_stage(metrics, orbs, has_ult=ult_char is not None)
@@ -728,6 +766,7 @@ class CanopusCarouselStrategy(IBattleStrategy):
             self._filler_turn(orbs)
 
         self._ensure_turn_finished()
+        self._turn_pending_fill = self._empty_slots() > 0
 
     # Requerido por IBattleStrategy; el carrusel no usa el protocolo de picks.
     def get_next_card_index(self, hand_of_cards: list[Card], picked_cards: list[Card], **kwargs) -> int:
