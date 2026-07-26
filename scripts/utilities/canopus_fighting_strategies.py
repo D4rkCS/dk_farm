@@ -2,6 +2,9 @@
 
 Ciclo infinito de 3 turnos guiado por el estado del talento de DK. Solo se
 mueven cartas para cargar orbes y se juegan las ultimates que van apareciendo.
+Tristan (4to aliado, última posición a la derecha) queda fuera del carrusel:
+el bot no detecta sus orbes ni mueve sus cartas, solo actúa sobre DK, Cusack
+y Galand.
 
   Turno A (dk_talento ACTIVO):
     1. Click al talento de DK.
@@ -54,26 +57,26 @@ from utilities.utilities import (
 
 _IMG_DIR = os.path.join("images", "canopus_dk")
 
-# Templates de cartas por personaje (la ulti es siempre el último nombre)
+# Templates de cartas por personaje (la ulti es siempre el último nombre).
+# Tristan queda fuera a propósito: el bot no debe mover sus cartas ni leer
+# sus orbes, así que no se le asigna template ni entra en FOCUS_ORDER.
 CHAR_TEMPLATES = {
     "dk": ("dk_single", "dk_area", "dk_ulti"),
     "cusack": ("cusack_single", "cusack_orbe", "cusack_ulti"),
     "galand": ("galand_single", "galand_desventaja", "galand_ulti"),
-    "tristan": ("tristan_single", "tristan_area", "tristan_ulti"),
 }
 ULT_TEMPLATES = {
     "dk": "dk_ulti",
     "cusack": "cusack_ulti",
     "galand": "galand_ulti",
-    "tristan": "tristan_ulti",
 }
 # Prioridad en empates: el foco de la estrategia es DK, Cusack y Galand.
-FOCUS_ORDER = ("dk", "cusack", "galand", "tristan")
+FOCUS_ORDER = ("dk", "cusack", "galand")
 
 _MIN_CARD_SCORE = 0.35  # score mínimo para asignar una carta a un personaje
 _MIN_ULT_SCORE = 0.40  # score mínimo para dar por encontrada una ulti en mano
 _ULT_VERIFY_SCORE = 0.32  # umbral (más bajo) para "la ulti sigue en mano" tras el click
-_MAX_ATTEMPTS = 3  # reintentos de un guion (con btn_reset entre intentos)
+_MAX_ATTEMPTS = 5  # reintentos de un guion (con btn_reset entre intentos)
 _MOVE_SLEEP = 1.2  # cooldown tras cada movimiento de carta (el juego necesita registrarlo)
 _PRE_CLICK_SLEEP = 1.0  # cooldown antes de clickear una carta (p. ej. la ultimate)
 _ULT_SLEEP = 1.5  # espera tras jugar una ultimate
@@ -218,16 +221,16 @@ class CanopusCarouselStrategy(IBattleStrategy):
         Tras confirmarlo espera un segundo extra antes de devolver el control,
         para que el juego asiente antes de empezar a mover cartas.
         """
-        for attempt in range(1, 4):
+        for attempt in range(1, _MAX_ATTEMPTS + 1):
             _, window_location = capture_window()
-            print(f"[Turno A] Click al talento de DK (intento {attempt}/3).")
+            print(f"[Turno A] Click al talento de DK (intento {attempt}/{_MAX_ATTEMPTS}).")
             click_im(_TALENT_POINT, window_location)
             time.sleep(_TALENT_SLEEP)
             screenshot, _ = capture_window()
             if read_dk_talent_metrics(screenshot)["estado"] != "activo":
                 time.sleep(_POST_TALENT_SLEEP)
                 return
-        print("[Turno A] El talento sigue brillando tras 3 clicks; continúo de todas formas.")
+        print(f"[Turno A] El talento sigue brillando tras {_MAX_ATTEMPTS} clicks; continúo de todas formas.")
         time.sleep(_POST_TALENT_SLEEP)
 
     def _press_reset(self) -> bool:
@@ -319,10 +322,10 @@ class CanopusCarouselStrategy(IBattleStrategy):
             print(f"No hay ultimate reconocible en la mano (mejor score {score:.2f}).")
             return False
 
-        for attempt in range(1, 4):
+        for attempt in range(1, _MAX_ATTEMPTS + 1):
             _, window_location = capture_window()
             time.sleep(_PRE_CLICK_SLEEP)
-            print(f"Jugando la ultimate de {char} (score {score:.2f}, intento {attempt}/3).")
+            print(f"Jugando la ultimate de {char} (score {score:.2f}, intento {attempt}/{_MAX_ATTEMPTS}).")
             click_im(card.rectangle, window_location)
             time.sleep(_ULT_SLEEP)
 
@@ -333,7 +336,7 @@ class CanopusCarouselStrategy(IBattleStrategy):
                 return True
             print(f"La ultimate de {char} sigue en la mano (score {score:.2f}); reintento el click.")
 
-        print(f"No pude confirmar que la ultimate de {char} se jugara tras 3 clicks.")
+        print(f"No pude confirmar que la ultimate de {char} se jugara tras {_MAX_ATTEMPTS} clicks.")
         return False
 
     def _char_by_orbs(self, orbs: list[int], predicate, label: str) -> int | None:
@@ -447,7 +450,12 @@ class CanopusCarouselStrategy(IBattleStrategy):
         self._move_char_cards(CHARACTER_NAMES[target], 2)
 
     def _ensure_turn_finished(self) -> None:
-        """Rellenar los slots que falten con movimientos para que el turno siempre termine."""
+        """Rellenar los slots que falten con movimientos del personaje con menos orbes.
+
+        Si no encuentra cartas de ese personaje para mover, no hace ningún
+        movimiento a ciegas: prefiere dejar el turno como esté a arriesgar una
+        jugada al azar.
+        """
         for _ in range(6):
             wait_if_paused()
             if self._empty_slots() == 0:
@@ -455,15 +463,8 @@ class CanopusCarouselStrategy(IBattleStrategy):
             orbs = self._read_orbs_reliable() or [0] * len(CHARACTER_NAMES)
             target = min(range(len(orbs)), key=lambda i: (orbs[i], FOCUS_ORDER.index(CHARACTER_NAMES[i])))
             if self._move_char_cards(CHARACTER_NAMES[target], 1) == 0:
-                # Último recurso: mover cualquier par de cartas ocupadas
-                snapshot = self._hand_snapshot()
-                if len(snapshot) >= 2:
-                    _, window_location = capture_window()
-                    a = get_click_point_from_rectangle(snapshot[-1][1].rectangle)
-                    b = get_click_point_from_rectangle(snapshot[-2][1].rectangle)
-                    print("Movimiento genérico para completar el turno.")
-                    drag_im(a, b, window_location, sleep_after_click=0.1, drag_duration=0.25)
-                    time.sleep(_MOVE_SLEEP)
+                print("No encuentro cartas para completar el turno; no arriesgo un movimiento al azar.")
+                return
             time.sleep(0.4)
 
     @staticmethod

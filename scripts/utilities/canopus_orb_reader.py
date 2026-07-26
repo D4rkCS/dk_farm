@@ -1,24 +1,25 @@
-"""Lector de orbes de ultimate para la Estrategia Canopus (formación de 4 aliados).
+"""Lector de orbes de ultimate para la Estrategia Canopus (formación de 3 aliados).
 
 Cada aliado tiene sobre su cabeza una barra de vida verde y debajo una fila de
 5 orbes que se llenan de dorado al mover sus cartas. Este módulo localiza las
 barras HP por color (la cámara del juego se desplaza, así que no sirven
 coordenadas fijas) y cuenta los orbes llenos de cada personaje.
 
-La formación de los 4 aliados es rígida: las distancias entre barras son
-constantes aunque la cámara se mueva. En lugar del matching por tríos/pares de
-la versión de 3 personajes, aquí cada barra candidata "vota" por dónde estaría
-el origen de la formación completa; gana la hipótesis con más barras de apoyo
-y las barras tapadas (números de daño, efectos, barra vacía por daño) se
-reconstruyen a partir de ese origen. Basta con ver 2 de las 4 barras.
+La formación de los 3 aliados es rígida: las distancias entre barras son
+constantes aunque la cámara se mueva. Cada barra candidata "vota" por dónde
+estaría el origen de la formación completa; gana la hipótesis con más barras
+de apoyo y las barras tapadas (números de daño, efectos, barra vacía por daño)
+se reconstruyen a partir de ese origen. Basta con ver 2 de las 3 barras.
 
-Orden en pantalla (izquierda a derecha): DK, Cusack, Galand, Tristan.
+Orden en pantalla (izquierda a derecha): DK, Cusack, Galand. Tristan (4ta
+posición, a la derecha) queda fuera de la estrategia: el bot no mueve sus
+cartas ni intenta leer sus orbes.
 
 Calibrado con captura real de la pelea (2026-07-26), a escala nativa de la
 ventana estándar del bot (captura de 550x940):
 - Barra HP llena: franja verde-lima de ~77x7 px, en y ∈ [450, 505] aprox.
-- Offsets respecto a la barra izquierda (slot 0): (+129, +20), (+272, -19),
-  (+381, +24). Formación escalonada (Galand, slot 2, es el elevado).
+- Offsets respecto a la barra izquierda (slot 0): (+129, +20), (+272, -19).
+  Formación escalonada (Galand, slot 2, es el elevado).
 - Orbes: fila de 5, empieza en (barra_x+2, barra_y+alto+8), paso 14.0 px,
   celda de 13x13 px.
 - Orbe lleno: S media 130-141, V media 183-216. Vacío: S 69-116, V 77-134.
@@ -37,13 +38,13 @@ import cv2
 import numpy as np
 
 # Orden de los personajes en pantalla (izquierda a derecha). Actualizado
-# 2026-07-26: el foco de la estrategia es DK, Cusack y Galand.
+# 2026-07-26: el foco de la estrategia es DK, Cusack y Galand; Tristan (4ta
+# posición, a la derecha) no se detecta ni se juega.
 ORB_DK = 0
 ORB_CUSACK = 1
 ORB_GALAND = 2
-ORB_TRISTAN = 3
-CHARACTER_NAMES = ("dk", "cusack", "galand", "tristan")
-NUM_ALLIES = 4
+CHARACTER_NAMES = ("dk", "cusack", "galand")
+NUM_ALLIES = 3
 
 # Región donde viven las barras HP de los aliados
 _BAND_Y_MIN = 400
@@ -57,14 +58,14 @@ _ORB_PITCH = 14.0
 _ORB_SIZE = 13
 _ORBS_PER_ALLY = 5
 
-# Offsets rígidos de la formación de 4, respecto a la barra de más a la
+# Offsets rígidos de la formación de 3, respecto a la barra de más a la
 # izquierda (slot 0). Recalibrados 2026-07-26 tras reordenar el equipo a
-# DK, Cusack, Galand, Tristan (captura nativa 550x940).
+# DK, Cusack, Galand (captura nativa 550x940). Tristan (4ta posición) queda
+# fuera de la formación: no se detecta.
 _FORMATION = (
     (0, 0),
     (129, 20),
     (272, -19),
-    (381, 24),
 )
 _TOL_X = 28
 _TOL_Y = 13
@@ -285,10 +286,13 @@ def read_dk_talent(screenshot: np.ndarray) -> tuple[str, float]:
 
 
 def read_ally_orbs(screenshot: np.ndarray) -> list[int] | None:
-    """Cuenta los orbes llenos de cada uno de los 4 aliados.
+    """Cuenta los orbes llenos de cada uno de los 3 aliados (DK, Cusack, Galand).
+
+    Tristan (4ta posición, a la derecha) no forma parte de la formación y no
+    se detecta.
 
     Returns:
-        Lista de 4 valores 0-5 en orden de pantalla (izquierda a derecha), o
+        Lista de 3 valores 0-5 en orden de pantalla (izquierda a derecha), o
         None si la lectura no es confiable (no se pudieron ubicar suficientes
         barras HP ni por geometría).
     """
