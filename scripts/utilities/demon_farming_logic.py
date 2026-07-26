@@ -1,0 +1,495 @@
+import threading
+import time
+from enum import Enum
+
+import numpy as np
+import pyautogui as pyautogui
+import utilities.vision_images as vio
+from utilities.app_config import get_minutes_to_wait_before_login
+from utilities.coordinates import Coordinates
+from utilities.general_farmer_interface import CHECK_IN_HOUR, IFarmer
+from utilities.general_fighter_interface import IBattleStrategy, IFighter
+from utilities.indura_fighter import InduraFighter
+from utilities.indura_fighting_strategies import InduraBattleStrategy
+from utilities.logging_utils import LoggerWrapper
+from utilities.utilities import (
+    capture_window,
+    crop_region,
+    display_image,
+    find,
+    find_and_click,
+)
+from utilities.vision import Vision
+
+logger = LoggerWrapper(name="DemonLogger", log_to_file=False)
+
+
+class States(Enum):
+    GOING_TO_DEMONS = 0
+    LOOKING_FOR_DEMON = 1
+    READY_TO_FIGHT = 2
+    FIGHTING_DEMON = 3
+
+
+class IDemonFarmer(IFarmer):
+
+    # Needs to be static in case we restart the instance
+    demons_destroyed = 0
+
+    # We need to keep track if 'auto' is clicked or not...
+    auto = False
+
+    # For sending an emoji
+    sent_emoji = False
+
+    # For checking if we've seen and missed an invite
+    not_seen_invite = False
+    start_time_without_invite = time.time()
+
+    # Keep track how many demons we've tried to beat
+    num_tries = 0
+
+    # Keep track how many missed invites we've had
+    missed_invites = 0
+
+    # To control the sleeping time
+    sleeper = threading.Event()
+
+    # For indura
+    total_non_fairies = 0
+    wins_non_fairies = 0
+    current_team_non_fairy = False
+
+    def __init__(
+        self,
+        battle_strategy: IBattleStrategy = None,
+        starting_state=States.GOING_TO_DEMONS,
+        demon_to_farm: Vision = vio.og_demon,
+        time_to_sleep=9.3,
+        do_dailies=False,
+        do_daily_pvp=True,
+        password: str | None = None,
+        indura_difficulty: str = "extreme",  # Difficulty of Indura demon
+        indura_team: str = "fairies",
+    ):
+        super().__init__(do_daily_pvp=do_daily_pvp)
+
+        # Store the account password in this instance if given
+        if password:
+            IFarmer.password = password
+            print("Stored the account password locally in case we need to log in again.")
+            print(f"We'll wait {get_minutes_to_wait_before_login()} mins. before attempting a log in.")
+
+        # Starting state
+        self.current_state = starting_state
+
+        # Demon to farm
+        self.demon_to_farm = demon_to_farm
+
+        # No battle strategy needed, we'll auto
+        self.battle_strategy = battle_strategy
+
+        # How much time to sleep before accepting the invitation -- May need to me hand-tuned
+        self.sleep_before_accept = time_to_sleep
+
+        # Set specific properties of our DailyFarmer
+        IFarmer.daily_farmer.add_complete_callback(self.dailies_complete_callback)
+
+        # For the Indura fight!
+        self.indura_difficulty = indura_difficulty
+        self.indura_team = indura_team
+        indura_strategy = self._resolve_indura_strategy()
+        self.fighter: IFighter = InduraFighter(
+            battle_strategy=indura_strategy,
+            callback=None,  # No need to use a fight complete callback for this
+        )
+        self.indura_fight_thread: threading.Thread = None
+        if self.demon_to_farm == vio.indura_demon:
+            print(f"We'll farm {self.indura_difficulty} Indura with the {self.indura_team} team strategy!")
+
+        IFarmer.do_dailies = do_dailies
+        if do_dailies:
+            print(f"We'll stop farming to do daily missions at {CHECK_IN_HOUR}h PST.")
+
+    def exit_message(self):
+        """Final message!"""
+        print(
+            f"We destroyed {IDemonFarmer.demons_destroyed}/{IDemonFarmer.num_tries} demons and missed {IDemonFarmer.missed_invites} invites."
+        )
+
+    def _resolve_indura_strategy(self) -> type[IBattleStrategy]:
+        """Resolve the configured Indura strategy, falling back to fairies if humans cannot load."""
+        if self.indura_team == "fairies":
+            return InduraBattleStrategy
+
+        if self.indura_team == "humans":
+            try:
+                from utilities.indura_human_fighting_strategies import (
+                    InduraHumanBattleStrategy,
+                )
+
+                return InduraHumanBattleStrategy
+            except Exception as exc:
+                print(f"[WARN] Human Indura strategy could not be loaded ({exc}). Falling back to fairies.")
+                self.indura_team = "fairies"
+                return InduraBattleStrategy
+
+        raise RuntimeError(f"Unknown Indura team: {self.indura_team}")
+
+    def going_to_demons_state(self):
+        """Go to the demons page"""
+        screenshot, window_location = capture_window()
+
+        if find(vio.demons_auto, screenshot):
+            # Going to the fight!
+            self.current_state = States.FIGHTING_DEMON
+            print(f"We're still fighting, we were wrong!")
+
+        if find(vio.preparation_incomplete, screenshot):
+            # We're waiting to click on preparation incomplete!
+            self.current_state = States.READY_TO_FIGHT
+            print(f"Moving to {self.current_state}.")
+            return
+
+        # If we see a 'CANCEL', change the state
+        if find(vio.cancel_realtime, screenshot):
+            self.current_state = States.LOOKING_FOR_DEMON
+            print(f"Moving to {self.current_state}.")
+            return
+
+        if self._handle_daily_reset_entrypoint(screenshot, window_location):
+            if IFarmer.do_dailies:
+                logger.info("We entered the daily reset state!")
+            return
+
+        # Click OK if we see it (?)
+        if find(vio.ok_main_button, screenshot) and not find(self.demon_to_farm, screenshot):
+            find_and_click(vio.ok_main_button, screenshot, window_location, threshold=0.7, sleep_time=1)
+
+        # Go to battle menu
+        find_and_click(vio.battle_menu, screenshot, window_location, threshold=0.6, sleep_time=1)
+
+        # Go to demons
+        find_and_click(vio.boss_menu, screenshot, window_location, sleep_time=1)
+
+        # Click on real-time menu
+        find_and_click(vio.real_time, screenshot, window_location, threshold=0.6, sleep_time=0.2)
+
+        # Click on the demon to farm (if it's not Red, since Red is by default)
+        if "red" not in self.demon_to_farm.image_name.lower():
+            find_and_click(self.demon_to_farm, screenshot, window_location, sleep_time=0.2)
+
+        if self.demon_to_farm == vio.indura_demon:
+            if self.indura_difficulty == "extreme":
+                if find(vio.normal_difficulty, screenshot):
+                    find_and_click(vio.normal_difficulty, screenshot, window_location, threshold=0.6)
+                else:
+                    find_and_click(vio.extreme_difficulty, screenshot, window_location, threshold=0.6)
+            elif self.indura_difficulty == "hell":
+                if find(vio.normal_difficulty, screenshot):
+                    find_and_click(vio.hard_difficulty, screenshot, window_location, threshold=0.6)
+                else:
+                    find_and_click(vio.hell_difficulty, screenshot, window_location, threshold=0.6)
+            elif self.indura_difficulty == "chaos":
+                if find(vio.normal_difficulty, screenshot):
+                    find_and_click(vio.extreme_difficulty, screenshot, window_location, threshold=0.6)
+                else:
+                    find_and_click(vio.chaos_difficulty, screenshot, window_location, threshold=0.6)
+            else:
+                raise RuntimeError(f"Unknown Indura difficulty: {self.indura_difficulty}")
+            return
+
+        # Click on the difficuly -- ONLY HELL
+        find_and_click(vio.hell_difficulty, screenshot, window_location, threshold=0.6)
+
+    def wait_for_accepting_invite(self):
+        """Wait for 9 seconds before accepting the invite. This should be a threading event!"""
+        print(f"Found a raid! Sleeping for {self.sleep_before_accept} s before clicking...")
+        IDemonFarmer.sleeper.clear()  # We have to reset the sleeper event
+        IDemonFarmer.sleeper.wait(timeout=self.sleep_before_accept)
+
+    def looking_for_demon_state(self):  # sourcery skip: extract-method
+        """Waiting for someone to send us a demon"""
+        screenshot, window_location = capture_window()
+
+        # First, if it's time to check in, do it
+        if self.check_for_dailies():
+            return
+        # If we're past the checkin hour, reset the flag for tomorrow
+        self.maybe_reset_daily_checkin_flag()
+
+        if find(vio.accept_invitation, screenshot, threshold=0.7):
+            # First of all, start the sleeping thread
+            sleep_thread = threading.Thread(target=self.wait_for_accepting_invite)
+            sleep_thread.start()
+
+            # Now, verify if this is a valid invite
+            IDemonFarmer.current_team_non_fairy = False
+            if self.demon_to_farm == vio.indura_demon:
+                time.sleep(2)
+                screenshot, window_location = capture_window()
+                if not self._is_indura_team_valid(screenshot, debug=False):
+                    IDemonFarmer.current_team_non_fairy = True
+                #     print("The inviting team is not good enough for Indura! Canceling invitation...")
+                #     # display_image(screenshot, "valid team?")
+                #     time.sleep(1)
+                #     find_and_click(vio.cancel_realtime, screenshot, window_location)
+                #     # Stop the sleeping thread!
+                #     IDemonFarmer.sleeper.set()
+                #     sleep_thread.join()
+                #     return
+
+            sleep_thread.join()  # Wait for the sleeping thread to finish
+
+            # Need to re-check if 'accept invitation' is there
+            accept_screenshot, window_location = capture_window()
+            find_and_click(vio.accept_invitation, accept_screenshot, window_location, threshold=0.7)
+            time.sleep(3)
+
+            # Evaluate if the invite was successsful
+            screenshot, _ = capture_window()
+            if find(vio.real_time, screenshot):
+                IDemonFarmer.missed_invites += 1
+                print(f"We missed the invite :( {IDemonFarmer.missed_invites} invites so far.")
+                # And let's save the screenshot we tried to accept on, to see what happened
+                logger.save_image(accept_screenshot, subdir="demons")
+
+            elif IDemonFarmer.current_team_non_fairy:
+                IDemonFarmer.total_non_fairies += 1
+                # print(f"We've seen a total of {IDemonFarmer.total_non_fairies} non-fairy teams")
+
+            return
+
+        if find(vio.demons_loading_screen, screenshot) or find(vio.preparation_incomplete, screenshot):
+            # Going to the raid screen
+            self.current_state = States.READY_TO_FIGHT
+            print(f"Moving to {self.current_state}.")
+            return
+
+        if not find(vio.cancel_realtime, screenshot):
+            if not IDemonFarmer.not_seen_invite:
+                IDemonFarmer.start_time_without_invite = time.time()
+                IDemonFarmer.not_seen_invite = True
+
+            if time.time() - IDemonFarmer.start_time_without_invite > 2:  # Only wait 2 seconds
+                self.current_state = States.GOING_TO_DEMONS
+                IDemonFarmer.not_seen_invite = False
+
+    def _is_indura_team_valid(self, screenshot: np.ndarray, debug=False) -> bool:
+        """Evaluate if the inviting team is good enough for Indura"""
+        if self.indura_difficulty == "extreme":
+            # Allow any team in Extreme difficulty
+            return True
+
+        # Crop the image to the region of the team invite
+        team_invite_region = crop_region(screenshot, Coordinates.get_coordinates("team_invite_region"))
+        valid = find(vio.lancelot_unit, team_invite_region, threshold=0.7) and find(
+            vio.alpha_unit, team_invite_region, threshold=0.7
+        )  # or find(vio.new_freyr_unit, team_invite_region, threshold=0.7)
+        if debug and not valid:
+            display_image(screenshot, title="Inviting team is not good enough")
+        return valid
+
+    def ready_to_fight_state(self):
+        """We've accepted a raid!"""
+        screenshot, window_location = capture_window()
+
+        # If we're ready to fight, send an emoji *only once*
+        if not IDemonFarmer.sent_emoji and find(vio.cancel_preparation, screenshot):
+            find_and_click(
+                vio.cancel_preparation,
+                screenshot,
+                window_location,
+                point_coordinates=Coordinates.get_coordinates("stamp_box"),
+                sleep_time=1,
+            )
+            find_and_click(
+                vio.cancel_preparation,
+                screenshot,
+                window_location,
+                point_coordinates=Coordinates.get_coordinates("first_stamp"),
+                sleep_time=1,
+            )
+            IDemonFarmer.sent_emoji = True
+
+        # Click on the "preparation"
+        find_and_click(vio.preparation_incomplete, screenshot, window_location, threshold=0.8, sleep_time=1)
+
+        # We may have been kicked, move to initial state if so
+        if find(vio.ok_main_button, screenshot) or find(vio.battle_menu, screenshot, threshold=0.6):
+            self.current_state = States.GOING_TO_DEMONS
+            print(f"We've been kicked out... Moving to {self.current_state}.")
+            return
+
+        if find(vio.demons_auto, screenshot):
+            # Going to the fight!
+            self.current_state = States.FIGHTING_DEMON
+            print(f"Moving to {self.current_state}.")
+
+    def fighting_demon_state(self):
+        # sourcery skip: extract-duplicate-method, extract-method, split-or-ifs
+        """Fighting the demon hard..."""
+        screenshot, window_location = capture_window()
+
+        if self.demon_to_farm == vio.indura_demon and (
+            (self.indura_fight_thread is None) or not self.indura_fight_thread.is_alive()
+        ):
+            self.fighter.prepare_for_new_fight()
+            self.indura_fight_thread = threading.Thread(target=self.fighter.run, daemon=True)
+            self.indura_fight_thread.start()
+            print("Indura demon fighter started!")
+            # And disable the auto button
+            IDemonFarmer.auto = True
+            IDemonFarmer.sent_emoji = False
+
+        # Below, only for non-Indura demons
+        elif not IDemonFarmer.auto and find_and_click(vio.demons_auto, screenshot, window_location, threshold=0.7):
+            IDemonFarmer.auto = True
+            IDemonFarmer.sent_emoji = False
+
+        # If we see a skip
+        find_and_click(vio.skip, screenshot, window_location)
+
+        # When we've destroyed the demon
+        find_and_click(vio.demons_destroyed, screenshot, window_location, threshold=0.5)
+
+        if find_and_click(vio.ok_main_button, screenshot, window_location) or find(
+            vio.battle_menu, screenshot, threshold=0.6
+        ):
+            IDemonFarmer.num_tries += 1
+            victory = find(vio.victory, screenshot, threshold=0.6)
+            if victory:
+                print("Demon destroyed!")
+                IDemonFarmer.demons_destroyed += 1
+                if IDemonFarmer.current_team_non_fairy:
+                    IDemonFarmer.wins_non_fairies += 1
+            else:
+                print("Couldn't defeat this demon :(")
+                print("[LOSS]")
+
+            # Reset current non-fairy team
+            IDemonFarmer.current_team_non_fairy = False
+
+            IDemonFarmer.auto = False
+            self.current_state = States.GOING_TO_DEMONS
+
+            percent = IDemonFarmer.demons_destroyed / IDemonFarmer.num_tries * 100 if IDemonFarmer.num_tries > 0 else 0
+            non_fairies_percent = (
+                IDemonFarmer.wins_non_fairies / IDemonFarmer.total_non_fairies * 100
+                if IDemonFarmer.total_non_fairies > 0
+                else 0
+            )
+            demon_label = " Indura" if self.demon_to_farm == vio.indura_demon else ""
+
+            msg = (
+                f"We've destroyed {IDemonFarmer.demons_destroyed}/"
+                f"{IDemonFarmer.num_tries}{demon_label} demons "
+                f"({percent:.2f}%)."
+            )
+
+            # if self.demon_to_farm == vio.indura_demon:
+            #     msg += (
+            #         f"\nNon-fairy win ratio: {IDemonFarmer.wins_non_fairies}/"
+            #         f"{IDemonFarmer.total_non_fairies} "
+            #         f"({non_fairies_percent:.2f}%)"
+            #     )
+
+            print(msg)
+            if victory:
+                print("[CLEAR]")
+            print(f"We've missed {IDemonFarmer.missed_invites} invites.")
+            print(f"Moving to {self.current_state}.")
+
+            # And kill the fighter in case we have it
+            self.stop_fighter_thread()
+
+    def dailies_complete_callback(self):
+        """The dailies thread told us we're done with all the dailies, go back to farming demons"""
+        with IFarmer._lock:
+            print("All dailies complete! Going back to farming demons.")
+            IFarmer.dailies_thread = None
+            self.current_state = States.GOING_TO_DEMONS
+
+    def run(self):
+        raise NotImplementedError("Virtual method. Need to implement this method in a derived class.")
+
+
+class DemonFarmer(IDemonFarmer):
+    """This class resets the demon to farm every X hours"""
+
+    def __init__(
+        self,
+        battle_strategy: IBattleStrategy = None,
+        starting_state=States.GOING_TO_DEMONS,
+        demons_to_farm: list[Vision] = None,
+        time_to_sleep=9.4,
+        time_between_demons=2,
+        do_dailies=False,  # Do we halt demon farming to do dailies?
+        do_daily_pvp=True,  # If we do dailies, do we do PVP?
+        password: str = None,
+        indura_difficulty: str = "extreme",  # Difficulty of Indura demon
+        indura_team: str = "fairies",
+    ):
+        if demons_to_farm is None:
+            demons_to_farm = [vio.og_demon]
+
+        # Initialize the DemonFarmer with the first demon of the list
+        super().__init__(
+            battle_strategy,
+            starting_state,
+            demons_to_farm[0],
+            time_to_sleep,
+            do_dailies=do_dailies,
+            do_daily_pvp=do_daily_pvp,
+            password=password,
+            indura_difficulty=indura_difficulty,
+            indura_team=indura_team,
+        )
+
+        # Every how many hours to switch between demons
+        self.time_between_demons = time_between_demons
+
+        # Roulette of demons
+        self.demon_roulette = demons_to_farm
+        self.start_time = time.time()
+
+    def rotate_demon(self):
+        """Rotate a demon if X hours have passed"""
+
+        if time.time() - self.start_time > self.time_between_demons * 3600:
+            # Increase the index by one
+            demon_names: list[str] = [demon.image_name for demon in self.demon_roulette]
+            demon_idx = np.where(np.array(demon_names) == self.demon_to_farm.image_name)[0] + 1
+            demon_idx = int(demon_idx % len(self.demon_roulette))
+
+            # Update the new demon to farm
+            new_demon_to_farm = self.demon_roulette[demon_idx]
+            if new_demon_to_farm != self.demon_to_farm:
+                self.demon_to_farm = new_demon_to_farm
+                logger.info(f"Switched demon to {self.demon_to_farm.image_name}")
+
+            # Record the new time
+            self.start_time = time.time()
+
+    def run(self):
+
+        print(f"Farming demons, starting from {self.current_state}.")
+        print(f"We'll be farming {[demon.image_name for demon in self.demon_roulette]} demon(s).")
+
+        def fighting_demon_state():
+            self.fighting_demon_state()
+            time.sleep(0.2)
+
+        self.run_state_loop(
+            {
+                States.GOING_TO_DEMONS: self.going_to_demons_state,
+                States.LOOKING_FOR_DEMON: self.looking_for_demon_state,
+                States.READY_TO_FIGHT: self.ready_to_fight_state,
+                States.FIGHTING_DEMON: fighting_demon_state,
+            },
+            login_return_state=States.GOING_TO_DEMONS,
+            sleep_seconds=0.01,
+        )
+
+    def before_state_loop_iteration(self) -> None:
+        self.rotate_demon()

@@ -1,0 +1,106 @@
+# 7DS Grand Cross scripts for auto-farming
+
+This repository contains several scripts for auto-farming specific events in the 7DS Grand Cross mobile game.
+For now it's built for Windows only, but it could change in the future.
+
+
+## Installation
+
+#### Git
+
+To keep up-to-date with any updates, you'll need to install [Git](https://gitforwindows.org/) for Windows. Simply download the executable and install it.
+
+#### Python 
+
+Install Python ~~<b>3.10</b> or <b>3.11</b>~~  <b>3.12</b> from the Microsoft Store:<br>
+<img src="readme_images/python311.png" alt="IDLE app" width="200"/><br>
+
+#### Download the code
+
+1. After you have installed Git from above, open a folder where you want to download the code.
+2. While pressing the `SHIFT` key, right-click inside the folder and then click on `Open PowerShell window here`.
+3. Once the terminal is open, simply copy the following command and right-click inside the terminal to paste it:<br> 
+`git clone https://github.com/PhantomPilots/AutoFarming.git`<br>
+and press `ENTER`.
+This downloads the code into a folder named _AutoFarming_.
+
+#### Additional Python modules
+Now we need to install some additional Python modules for the scripts to work. To do so, click on `install.bat` that is within `scripts`.
+
+### Code updates
+
+Now, simply via the `Update` button in the "About" tab of the GUI!
+
+### How to run the bots
+
+1. Inside `scripts`, click on `main.exe`. This should open an interface to interact with.
+2. Select the farmer tab you want to use
+3. Configure the arguments in the left panel
+4. Click "START" to begin farming
+5. Monitor progress in the terminal output window
+6. Click "STOP" when finished
+
+You can PAUSE/RESUME the bot at any time with the corresponding button.
+
+### Game password (optional)
+
+If the game logs you out, put your password in **Settings** so the bot can sign back in; change how long it waits after logout there too if you need to. 
+
+### Push Notifications
+The bot can send push notifications to your phone when it detects a stuck state, including a screenshot for quick diagnosis. Once the bot recovers, you get a recovery alert.
+
+**Setup:**
+1. Install [ntfy](https://ntfy.sh/) on your phone
+2. Open the app, press '+' and enter a unique, hard-to-guess topic name (e.g. `7ds_farmer_myname_abc123`)
+3. In the AutoFarmers GUI, open the **Settings** tab and set the topic (or edit `scripts/config/config.yaml` and set `ntfy_private_channel`)
+
+Saving from the GUI rewrites `config.yaml` with PyYAML; **inline comments in that file are not preserved** on save.
+
+**Optional tuning** (all in `config.yaml` or the **Settings** tab):
+| Key | Default | Description |
+|-----|---------|-------------|
+| `stuck_timeout_minutes` | 10 | Minutes without state change *and* click activity before alerting |
+| `notification_cooldown_minutes` | 5 | Minimum gap between repeated stuck alerts |
+| `max_notifications_per_incident` | 5 | Hard cap on alerts per stuck incident |
+| `game_password` | (empty) | Account password for re-login after logout (sensitive) |
+| `minutes_to_wait_before_login` | 30 | Minutes to wait after logout before attempting login again |
+
+**NOTE**: If during the farming the bot starts working in weird ways, most likely it's because the 7DS window has auto-resized to the wrong size. To restore the right size, use the "Resize" button.
+
+The GUI supports all available farmers including Bird, Deer, Dogs, Snake, Demon, Final Boss, Tower of Trials, etc.
+
+Happy farming!
+
+## Farming scripts
+
+For detailed information on all the bots available, go to the [bots README file](BOTS_README.md).
+
+## Troubleshooting
+
+* The scripts don't account for random pop-ups (such as demon invitations), so make sure you have those notifications disabled.
+* If when updating the code with `git pull` you get an error/warning saying the code cannot be updated, first run `git stash` and then `git pull` again. You should now see the code updated.
+* For more errors, please open a new "issue" in the "Issues" tab of this website.
+
+
+## Shorter-term features
+- [X] Rat farmer (F1-F2)
+- [X] Demon King farmer
+- [X] Guild Boss farmer
+- [X] Farmer for Bird Floor 4.
+- [X] Farmer for Deer Floor 4.
+- [X] Farmer for Dogs Floor 4 (beta version).
+- [X] Farmer for floors 1-3 of Deer.
+- [X] Farmer for floors 1-3 of Dogs.
+- [X] Farmer for floors 1-3 of Snake.
+- [X] Bot for all daily missions.
+- [X] Farmer for Indura Extreme/Hell/Chaos.
+- [X] Unify all farmers in a single GUI.
+- [ ] Buy daily stamina pots with friend coins, and get friend coins from mail.
+
+## Longer-term features
+
+- [X] Auto-size the game automatically when starting/stopping/resuming bots.
+- [X] Make them work in 4k monitors.
+
+## License
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

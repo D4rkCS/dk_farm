@@ -1,0 +1,539 @@
+from utilities.vision import MultiVision, Vision
+
+# TODO:
+
+# General images
+run_game = MultiVision(
+    "run_game.png",
+    "run_game_2.png",
+    image_name="Run game",
+)
+update_game_ok = Vision("outside\\ok_update_game.png")
+password = Vision("password.png")
+sync_code = Vision("sync_code.png")
+server_cancel = MultiVision(
+    "server_cancel.png",
+    image_name="server_cancel",
+)
+connection_confrm_expired = Vision("connection_confirmation_expired.png")
+again = Vision("again.png")
+lock = Vision("lock.png")
+restore_stamina = Vision(
+    "stamuse.png",
+    image_name="restore stamina",
+)
+startbutton = Vision("start.png")
+skip = MultiVision(
+    "skip.png",
+    "demonic_beasts\\skip_masked.png",
+    image_name="Skip",
+)
+reconnect = Vision("reconnect.png")
+restart = Vision("restart.png")
+result = Vision("result.png")
+mission = Vision("mission.png")
+reset = Vision("daily_reset.jpg")
+random = Vision("random.png")
+apply = MultiVision(
+    "apply.png",
+    "demon_king\\apply_dk.png",
+    image_name="apply",
+)
+back = Vision("back.png")
+equipment = Vision("equipment.png")
+auto_repeat_on = Vision("auto_repeat_on.png")
+auto_repeat_off = Vision("auto_repeat_off.png")
+tavern = Vision("tavern.png")
+fs_dungeon = Vision("fs_dungeon.png")
+high_grade_equipment = Vision("high_grade_equipment.png")
+empty_card_slot = Vision("empty_card_slot.png")
+empty_card_slot_2 = Vision("empty_card_slot_2.png")
+bronze_card = Vision("bronze_card.png")
+silver_card = Vision("silver_card.png")
+gold_card = Vision("gold_card.png")
+pause = Vision("pause.png")
+forfeit = Vision("forfeit.png")
+tavern_loading_screen = Vision("tavern_loading_screen.png")
+card_slot = Vision("card_slot.png")
+close = Vision("close.png")
+knighthood = Vision("knighthood.png")
+check_in = Vision("check_in.png")
+check_in_reward = Vision("check_in_reward.png")
+check_in_complete = Vision("check_in_complete.png")
+battle_menu = Vision("battle_menu.jpg")
+cancel = Vision("cancel.png")
+skill_locked = Vision("skill_locked.png")
+victory = MultiVision(
+    "victory.png",
+    "demonic_beasts\\db_victory.png",
+    image_name="victory",
+)
+global_server = Vision("global_server.png")
+yes = Vision("yes.png")
+start_quest = Vision("start_quest.png")
+essette_shop = Vision("essette_shop.png")
+duplicate_connection = MultiVision(
+    "duplicate_connection.png",
+    "simultaneous_logins.png",
+    image_name="duplicate_connection",
+)
+cross = MultiVision(
+    "cross.png",
+    "dailies\\big_cross.png",
+    image_name="cross",
+)
+pause_fight = Vision("pause_fight.png")
+continue_fight = Vision("continue.png")
+annoying_chat_popup = Vision("annoying_chat_popup.png")
+change_stats = MultiVision(
+    "change_again.png",
+    "change_stats.png",
+    image_name="Change stats",
+)
+stamina_pot = Vision("stamina_pot.png")
+
+# Gold farming
+gold_dungeon = Vision("gold_dungeon\\gold_dungeon.png")
+sixth_floor = Vision("gold_dungeon\\6th_floor.png")
+max_skip_tickets = Vision("gold_dungeon\\max_clears.png")
+
+# SA coin farmer
+clock_tower = Vision("sa_coin_dungeon\\clock_tower.png")
+clock_tower_floor = Vision("sa_coin_dungeon\\clock_tower_floor.png")
+sa_coin = Vision("sa_coin.png")
+sa_boss = Vision("sa_coin_dungeon\\sa_boss_hp.png")
+chest = Vision("sa_coin_dungeon\\chest.png")
+chest_bronze = Vision("sa_coin_dungeon\\chest_bronze.png")
+chest_silver = Vision("sa_coin_dungeon\\chest_silver.png")
+chest_gold = Vision("sa_coin_dungeon\\chest_gold.png")
+fs_loading_screen = Vision("fs_loading_screen.png")
+fs_dungeon_lock = Vision("sa_coin_dungeon\\fs_dungeon_lock.png")
+finished_auto_repeat_fight = Vision("finished_auto_repeat_fight.png")
+sa_coin_dungeon_menu = Vision("sa_coin_dungeon\\coin_dungeon.png")
+sa_tower_of_chaos = Vision("sa_coin_dungeon\\tower_of_chaos.png")
+sa_broken_clock_tower = Vision("sa_coin_dungeon\\broken_clock_tower.png")
+sa_no_keys = Vision("sa_coin_dungeon\\no_keys.png")
+
+
+# Equipment farming
+auto_repeat_ended = Vision("equipment\\auto_repeat_ended.png")
+
+# Demonic beasts
+floor1 = Vision("demonic_beasts\\floor1.png")
+floor2 = Vision("demonic_beasts\\floor2.png")
+floor3 = Vision("demonic_beasts\\floor3.png")
+phase_1 = Vision("demonic_beasts\\phase_1.png")
+phase_2 = Vision("demonic_beasts\\phase_2.png")
+phase_3 = Vision("demonic_beasts\\phase_3.png")
+phase_3_dogs = Vision("dogs\\phase_3_dogs.png")
+phase_4 = Vision("demonic_beasts\\phase_4.png")
+db_victory = Vision("demonic_beasts\\db_victory.png")
+demonic_beast_battle = Vision("demonic_beasts\\demonic_beast_battle.png")
+set_db_party = Vision("demonic_beasts\\set_party.png")
+extra_clear = Vision("demonic_beasts\\extra.png")
+
+# For Bird farming
+demonic_beast = Vision("demonic_beasts\\creature_nest.png")
+hraesvelgr = Vision("demonic_beasts\\hraesvelgr.png")
+empty_party = Vision("demonic_beasts\\empty_party.png")
+save_party = Vision("demonic_beasts\\save_party.png")
+db_loading_screen = Vision("demonic_beasts\\loading_screen.png")
+reset_demonic_beast = Vision("demonic_beasts\\reset_demonic_beast.png")
+floor_3_cleared_db = MultiVision(
+    # Bird floor 3 cleared images
+    "demonic_beasts\\floor_3_cleared_bird.png",
+    "demonic_beasts\\floor_3_cleared_2_bird.png",
+    "demonic_beasts\\floor_3_cleared_bird_2.png",
+    # Deer floor 3 cleared images
+    "demonic_beasts\\floor_3_cleared_deer.png",
+    "demonic_beasts\\floor_3_cleared_2_deer.png",
+    "demonic_beasts\\floor_3_cleared_deer_2.png",
+    # Dogs floor 3 cleared images
+    "demonic_beasts\\floor_3_cleared_skollandhati_cleaned.png",
+    "demonic_beasts\\floor_3_cleared_2_skollandhati.png",
+    "demonic_beasts\\floor_3_cleared_skollandhati_cleaned_2.png",
+    image_name="floor_3_cleared_db",
+)
+available_floor = Vision("demonic_beasts\\available_floor.png")
+creature_destroyed = Vision("demonic_beasts\\creature_destroyed.png")
+defeat = Vision("demonic_beasts\\defeat.png")
+weekly_mission = Vision("demonic_beasts\\lazy_weekly_mission.png")
+skollandhati = Vision("demonic_beasts\\skollandhati.png")
+guaranteed_reward = Vision("demonic_beasts\\guaranteed_reward.png")
+meli_aoe = Vision("demonic_beasts\\meli_aoe.png")
+meli_ult = Vision("demonic_beasts\\meli_ult.png")
+meli_ampli = Vision("demonic_beasts\\meli_ampli.png")
+block_skill_debuf = Vision("demonic_beasts\\block_skill_debuff.png")
+evasion = Vision("demonic_beasts\\evasion.png")
+stance_active = Vision("demonic_beasts\\stance_active.png")
+immortality_buff = Vision("demonic_beasts\\immortality.png")
+thor_thunderstorm = Vision("demonic_beasts\\thor_thunderstorm.png")
+first_reward = Vision("demonic_beasts\\first_reward.png")
+
+# For Deer
+eikthyrnir = Vision("deer\\Eikthyrnir.png")
+red_buff = MultiVision(
+    "deer\\red_buff.png",
+    "deer\\red_buff_tiny.png",
+    image_name="red_buff",
+)
+blue_buff = MultiVision(
+    "deer\\blue_buff.png",
+    "deer\\blue_buff_tiny.png",
+    image_name="blue_buff",
+)
+green_buff = MultiVision(
+    "deer\\green_buff.png",
+    "deer\\green_buff_tiny.png",
+    image_name="green_buff",
+)
+lv_st = Vision("deer\\lv_st.png")
+lv_aoe = Vision("deer\\lv_aoe.png")
+lv_ult = Vision("deer\\lv_ult.png")
+jorm_1 = Vision("deer\\jorm_1.png")
+jorm_2 = Vision("deer\\jorm_2.png")
+jorm_ult = Vision("deer\\jorm_ult.png")
+# Roxy card art (Deer demonic beast strategies)
+roxy_st = Vision("cards\\roxy_st.png")
+roxy_aoe = Vision("cards\\roxy_aoe.png")
+roxy_ult = Vision("cards\\roxy_ult.png")
+escanor_st = Vision("deer\\escanor_st.png")
+escanor_aoe = Vision("deer\\escanor_aoe.png")
+escanor_ult = Vision("deer\\escanor_ult.png")
+# For the new Deer F4 team
+thor_1 = Vision("deer\\thor_1.png")
+thor_2 = Vision("demonic_beasts\\thor_thunderstorm.png")
+thor_ult = Vision("deer\\thor_ult.png")
+freyr_1 = Vision("deer\\freyr_1.png")
+freyr_2 = Vision("deer\\freyr_2.png")
+freyr_ult = Vision("deer\\freyr_ult.png")
+meg_1 = Vision("deer\\meg_1.png")
+meg_ult = Vision("deer\\meg_ult.png")
+hel_1 = Vision("deer\\hel_1.png")
+hel_2 = Vision("deer\\hel_2.png")
+hel_ult = Vision("deer\\hel_ult.png")
+tyr_1 = Vision("deer\\tyr_1.png")
+tyr_2 = Vision("deer\\tyr_2.png")
+tyr_ult = Vision("deer\\tyr_ult.png")
+
+# For Dogs
+empty_slot_1 = Vision("dogs\\empty_slot_1.png")
+empty_slot_2 = Vision("dogs\\empty_slot_2.png")
+empty_slot_3 = Vision("dogs\\empty_slot_3.png")
+empty_slot_4 = Vision("dogs\\empty_slot_4.png")
+empty_slot_5 = Vision("dogs\\empty_slot_5.png")
+empty_slot_6 = Vision("dogs\\empty_slot_6.png")
+empty_slot_7 = Vision("dogs\\empty_slot_7.png")
+empty_slot_8 = Vision("dogs\\empty_slot_8.png")
+empty_slot_9 = Vision("dogs\\empty_slot_9.png")
+empty_slot_10 = Vision("dogs\\empty_slot_10.png")
+empty_slot_11 = Vision("dogs\\empty_slot_11.png")
+empty_slot_12 = Vision("dogs\\empty_slot_12.png")
+empty_slot_13 = Vision("dogs\\empty_slot_13.png")
+empty_slot_14 = Vision("dogs\\empty_slot_14.png")
+empty_slot_15 = Vision("dogs\\empty_slot_15.png")
+empty_slot_16 = Vision("dogs\\empty_slot_16.png")
+empty_slot_17 = Vision("dogs\\empty_slot_17.png")
+empty_slot_18 = Vision("dogs\\empty_slot_18.png")
+# Dogs Floor 4 + Dogs card templates (Escalin / Thonar). Nasiens: shared nasi_* in Snake section.
+escalin_st = Vision("dogs\\escalin_st.png")
+escalin_aoe = Vision("dogs\\escalin_aoe.png")
+escalin_ult = Vision("dogs\\escalin_ult.png")
+thonar_gauge = Vision("dogs\\thonar_gauge.png")
+thonar_stance = Vision("dogs\\thonar_stance.png")
+thonar_ult = Vision("dogs\\thonar_ult.png")
+lillia_aoe = Vision("dogs\\lillia_aoe.png")
+lillia_st = Vision("dogs\\lillia_st.png")
+cusack_gauge = Vision("dogs\\cusack_gauge.png")
+roxy_in_team = Vision("dogs\\roxy_in_team.png")
+lillia_in_team = Vision("dogs\\lillia_in_team.png")
+lillia_ult = Vision("dogs\\lillia_ult.png")
+meli3k_in_team = Vision("dogs\\meli3k_in_team.png")
+bluegow_in_team = Vision("dogs\\bluegow_in_team.png")
+b_thonar_in_team = Vision("dogs\\b_thonar_in_team.png")
+b_thonar_gauge = Vision("dogs\\b_thonar_gauge.png")
+b_thonar_stance = Vision("dogs\\b_thonar_stance.png")
+gow_atk = Vision("dogs\\gow_atk.png")
+gow_debuff = Vision("dogs\\gow_debuff.png")
+gow_ult = Vision("dogs\\gow_ult.png")
+meli3k_st = Vision("dogs\\meli3k_st.png")
+meli3k_aoe = Vision("dogs\\meli3k_aoe.png")
+meli3k_ult = Vision("dogs\\meli3k_ult.png")
+dogs_escalin_talent = Vision("dogs\\escalin_talent.png")
+dogs_left_target_sel = Vision("dogs\\left_target_sel.png")
+dogs_right_target_sel = Vision("dogs\\right_target_sel.png")
+dogs_right_target_sel2 = Vision("dogs\\right_target_sel2.png")
+dogs_p1targetleft = Vision("dogs\\p1targetleft.png")
+# Dogs Floor 4 freeze recovery.
+freeze_icon = Vision("dogs\\freeze_icon.png")
+
+# For Snake
+nidhoggr = Vision("snake\\nidhoggr.png")
+mael_st = Vision("snake\\mael_st.png")
+mael_aoe = Vision("snake\\mael_aoe.png")
+mael_ult = Vision("snake\\mael_ult.png")
+margaret_st = Vision("snake\\margaret_st.png")
+freyja_st = Vision("snake\\freyja_st.png")
+freyja_aoe = Vision("snake\\freyja_aoe.png")
+freyja_ult = Vision("snake\\freyja_ult.png")
+lr_liz_aoe = Vision("snake\\lr_liz_aoe.png")
+cha_atk = Vision("snake\\cha_atk.png")
+cha_bufrem = Vision("snake\\cha_bufrem.png")
+cha_ult = Vision("snake\\cha_ult.png")
+jin_aoe = Vision("snake\\jin_aoe.png")
+jin_st = Vision("snake\\jin_st.png")
+jin_ult = Vision("snake\\jin_ult.png")
+urek_atk = Vision("snake\\urek_atk.png")
+urek_deb = Vision("snake\\urek_deb.png")
+urek_ult = Vision("snake\\urek_ult.png")
+# Nasiens (shared by Dogs F4 + Snake)
+nasi_heal = Vision("snake\\nasi_heal.png")
+nasi_stun = Vision("snake\\nasi_stun.png")
+nasi_ult = Vision("snake\\nasi_ult.png")
+f2p3_t1 = Vision("snake\\f2p3_t1.png")
+snek_suppress = Vision("snake\\snek_suppress.png")
+snake_stance = Vision("snake\\snake_stance.png")
+snake_f3p2_counter = Vision("snake\\f3p2_counter.png")
+extort = Vision("snake\\extort.png")
+damage_increase = Vision("snake\\damage_increase.png")
+talent_trist = Vision("snake\\talent_trist.png")
+
+# For Rat
+ratatoskr = Vision("rat\\ratatoskr.png")
+rat_buff = MultiVision(
+    "rat\\rat_buff.png",
+    "rat\\rat_buff_small.png",
+    image_name="rat_buff",
+)
+damage_reduction = Vision("rat\\damage_reduction.png")
+rat_hidden = Vision("rat\\rat_hidden.png")
+jorm_bleed = Vision("rat\\jorm_bleed.png")
+val_shock = Vision("rat\\val_shock.png")
+val_poison = Vision("rat\\val_poison.png")
+val_ult = Vision("rat\\val_ult.png")
+jorm_buff_rem = Vision("rat\\jorm_buff_rem.png")
+kdiane_aoe = Vision("rat\\kdiane_aoe.png")
+kdiane_ult = Vision("rat\\kdiane_ult.png")
+talent_kd = Vision("rat\\talent_kd.png")
+talent_escalin = Vision("rat\\talent_escalin.png")
+
+# For final boss
+final_boss_menu = Vision("final_boss\\final_boss_menu.png")
+normal_difficulty = Vision("demons\\normal.png", image_name="normal_difficulty")
+hard_difficulty = MultiVision(
+    "final_boss\\hard_difficulty.png",
+    "demons\\hard.png",
+    "demon_king\\dk_hard.png",
+    image_name="hard_difficulty",
+)
+extreme_difficulty = MultiVision(
+    "final_boss\\extreme_difficulty.png",
+    "legendary_boss\\lb_extreme.png",
+    "demons\\extreme.png",
+    "demon_king\\dk_extreme.png",
+    "boss_battle\\boss_floor_extreme.png",
+    image_name="extreme_difficulty",
+)
+hell_difficulty = MultiVision(
+    "final_boss\\hell_difficulty.png",
+    "legendary_boss\\lb_hell.png",
+    "demons\\hell.png",
+    "demon_king\\dk_hell.png",
+    image_name="hell_difficulty",
+)
+challenge_difficulty = MultiVision(
+    "final_boss\\challenge_difficulty.png",
+    "legendary_boss\\lb_challenge.png",
+    image_name="challenge_difficulty",
+)
+chaos_difficulty = Vision("demons\\chaos.png", image_name="chaos_difficulty")
+boss_destroyed = Vision("final_boss\\boss_destroyed.png")
+boss_results = Vision("final_boss\\boss_results.png")
+boss_mission = Vision("final_boss\\boss_mission.png")
+episode_clear = Vision("final_boss\\episode_clear.png")
+showdown = Vision("final_boss\\showdown.png")
+fb_aut_off = Vision("final_boss\\auto_off.png")
+failed = Vision("final_boss\\failed.png")
+
+# For Legendary Boss
+legendary_boss_menu = Vision("legendary_boss\\legendary_boss_menu.png")
+legendary_boss_left_arrow = Vision("legendary_boss\\lb_left.png")
+legendary_boss_right_arrow = Vision("legendary_boss\\lb_right.png")
+legendary_boss_min_button = Vision("legendary_boss\\lb_min_btn.png")
+legendary_boss_final_score = Vision("legendary_boss\\lb_final_score.png")
+
+# For demon farming
+boss_menu = Vision("demons\\demons.jpg")
+red_demon = Vision("demons\\red_demon.png")
+gray_demon = Vision("demons\\gray_demon.png")
+crimson_demon = Vision("demons\\crimson_demon.png")
+bell_demon = Vision("demons\\bell_demon.png")
+og_demon = Vision("demons\\og_demon.png")
+indura_demon = Vision("demons\\indura_demon.png")
+accept_invitation = Vision("demons\\accept.png")
+real_time = Vision("demons\\RT.png")
+cancel_realtime = Vision("demons\\cancel.png")
+demons_loading_screen = Vision("demons\\demons_loading_screen.png")
+preparation_incomplete = Vision("demons\\preparation_incomplete.png")
+cancel_preparation = Vision("demons\\cancel_preparation.png")
+demons_auto = Vision("demons\\auto.jpg")
+demons_destroyed = Vision("demons\\demons_destroyed.png")
+# For Indura
+king_att = Vision("demons\\king_att.png")
+indura_empty_slot = Vision("demons\\indura_empty_slot.png")
+melee_evasion = Vision("demons\\melee_evasion.png")
+ranged_evasion = Vision("demons\\ranged_evasion.png")
+oxidize_indura = Vision("demons\\oxidize_indura.png")
+lancelot_unit = Vision("demons\\lancelot_unit.png")
+alpha_unit = Vision("demons\\alpha_unit.png")
+new_freyr_unit = Vision("demons\\new_freyr_unit.png")
+mini_king = Vision("demons\\mini_king.png")
+mini_heal = Vision("demons\\mini_heal.png")
+mini_beta_buf = Vision("demons\\mini_beta_buf.png")
+indura_tier = Vision("demons\\indura_tier.png")  # For phase 2 of Chaos!
+alpha_ult = Vision("demons\\alpha_ult.png")
+alpha_buff = Vision("demons\\alpha_buff.png")
+lance_att = Vision("demons\\lance_att.png")
+alpha_att = Vision("demons\\alpha_att.png")
+indura_jin_st = Vision("demons\\indura\\jin_st.png")
+indura_jin_aoe = Vision("demons\\indura\\jin_aoe.png")
+indura_jin_ult = Vision("demons\\indura\\jin_ult.png")
+indura_sho_att = Vision("demons\\indura\\sho_att.png")
+indura_sho_aoe = Vision("demons\\indura\\sho_aoe.png")
+indura_sho_ult = Vision("demons\\indura\\sho_ult.png")
+indura_freyr_att = Vision("demons\\indura\\freyr_att.png")
+indura_freyr_aoe = Vision("demons\\indura\\freyr_aoe.png")
+indura_ban_att = Vision("demons\\indura\\ban_att.png")
+indura_ban_aoe = Vision("demons\\indura\\ban_aoe.png")
+indura_ban_ult = Vision("demons\\indura\\ban_ult.png")
+indura_enjin_att = Vision("demons\\indura\\enjin_st.png")
+indura_enjin_aoe = Vision("demons\\indura\\enjin_aoe.png")
+indura_enjin_ult = Vision("demons\\indura\\enjin_ult.png")
+
+# Guild Boss
+knighthood_boss = Vision("guild_boss\\knighthood_boss.png")
+belgius_hel = Vision("guild_boss\\belguis_hel.png")
+kh_rank = Vision("guild_boss\\knighthood_rank.png")
+
+# Demon King
+demon_king = Vision("demon_king\\demon_king.png")
+x3 = Vision("demon_king\\x3.png")
+register_coins = Vision("demon_king\\register_coins.png")
+switch_dk_team = Vision("demon_king\\switch_dk_team.png")
+stance_counter = Vision("demon_king\\stance.png")
+corrosion_stance = Vision("demon_king\\corrosion_stance.png")
+lvl_1_rule = Vision("demon_king\\lvl_1.png")
+lvl_2_rule = Vision("demon_king\\lvl_2.png")
+lvl_3_rule = Vision("demon_king\\lvl_3.png")
+speed_rule = Vision("demon_king\\speed_rule.png")
+hp_rule = Vision("demon_king\\hp_rule.png")
+strength_rule = Vision("demon_king\\strength_rule.png")
+# Cards
+gelda_card = Vision("demon_king\\gelda_card.png")
+cusack_cleave = Vision("demon_king\\cusack_cleave.png")
+dk_meli_st = Vision("demon_king\\dk_meli_st.png")
+skuld_stance = Vision("demon_king\\skuld_stance.png")
+skuld_st = Vision("demon_king\\skuld_st.png")
+# Empty card slots
+dk_empty_slot = Vision("demon_king\\empty_slot.png")
+
+# For dailies
+auto_salvage = Vision("dailies\\auto_salvage.png")
+go_now = Vision("dailies\\go_now.png")
+mail = Vision("dailies\\mail.png")
+daily_quest_info = Vision("dailies\\quest_info.png")
+daily_result = Vision("dailies\\result.png")
+shop = Vision("dailies\\shop.png")
+auto_clear = Vision("dailies\\auto_clear.png")
+strart_auto_clear = Vision("dailies\\start_auto_clear.png")
+quests = Vision("dailies\\quests.png")
+daily_pvp = Vision("dailies\\daily_pvp.png")
+daily_boss_battle = Vision("dailies\\daily_boss_battle.png")
+daily_fort_solgress = Vision("dailies\\daily_fort_solgress.png")
+daily_friendship_coins = Vision("dailies\\daily_friendship_coins.png")
+daily_patrol = Vision("dailies\\daily_patrol.png")
+daily_vanya_ale = Vision("dailies\\daily_vanya_ale.png")
+take_all_rewards = Vision("dailies\\take_all.png")
+tasks = Vision("dailies\\tasks.png")
+daily_tasks = Vision("dailies\\daily_tasks.png")
+daily_complete = Vision("dailies\\complete.png")
+fortune_card = Vision("dailies\\fortune_card.png")
+blue_stone = Vision("dailies\\blue_stone.png")
+search_for_a_kh = Vision("dailies\\search_for_a_kh.png")
+participate = Vision("dailies\\participate.png")
+daily_complete = Vision("dailies\\daily_complete.png")
+daily_tasks_complete = Vision("dailies\\daily_tasks_complete.png")
+# Daily boss fight
+boss_battle = Vision("dailies\\boss_battle.png")
+normal_diff_boss_battle = Vision("dailies\\normal_difficulty.png")
+plus_auto_ticket = Vision("dailies\\plus_auto_ticket.png")
+# Patrol
+claim_reward = Vision("dailies\\claim_reward.png")
+complete_all = Vision("dailies\\complete_all.png")
+reward = Vision("dailies\\patrol_reward.png", image_name="reward")
+set_all_patrol = Vision("dailies\\set_all.png")
+patrol_all = Vision("dailies\\patrol_all.png")
+patrol_dispatched = Vision("dailies\\patrol_dispatched.png")
+patrol_setting_complete = Vision("dailies\\patrol_setting_complete.png")
+hp_patrol = Vision("dailies\\HP_patrol.png")
+dispatch = Vision("dailies\\dispatch.png")
+patrol_reward_obtained = Vision("dailies\\patrol_reward_obtained.png")
+# Fort Solgress
+fort_solgress_special = Vision("dailies\\fs_special.png")
+fs_event_dungeon = Vision("dailies\\event_dungeon.png")
+fs_special_6th_floor = Vision("dailies\\6th_floor.png")
+not_enough_dungeon_keys = Vision("dailies\\not_enough_dungeon_keys.png")
+event_special_fs_dungeon = Vision("dailies\\event_special_fs_dungeon.png")
+event_special_fs_battle = Vision("dailies\\event_special_fs_battle.png")
+ad_wheel_free = Vision("dailies\\ad_wheel_free.png")
+ad_wheel_play = Vision("dailies\\ad_wheel_play.png")
+# Friendship coins
+send_friendship_coins = Vision("dailies\\send_friendship_coins.png")
+claim_all = Vision("dailies\\claim_all.png")
+exit_cross = Vision("dailies\\exit_cross.png")
+# Vanya ale
+meli_affection = Vision("dailies\\meli_affection.png")
+perci_affection = Vision("dailies\\perci_affection.png")
+# Brawl
+brawl = Vision("dailies\\brawl.png")
+receive_brawl = Vision("dailies\\receive_brawl.png")
+receive_brawl_extended = Vision("dailies\\receive_brawl_extended.png")
+view_pvp_results = Vision("dailies\\view_results.png")
+join_all = Vision("dailies\\join_all.png")
+ready_up_brawl = Vision("dailies\\ready_up_brawl.png")
+battle_brawl = Vision("dailies\\battle_brawl.png")
+# PVP
+search_pvp_match = Vision("dailies\\search_pvp_match.png")
+tier_up_failed = Vision("dailies\\tier_up_failed.png")
+tier_up_successful = Vision("dailies\\tier_up_successful.png")
+# Whales
+membership_perk = Vision("dailies\\membership_perk.png")
+
+# For weeklies
+kh_boss_battle = Vision("weeklies\\kh_boss_battle.png")
+
+# Boss Battles
+sim_clear_on = Vision("boss_battle\\sim_clear_on.png")
+activate_all_on = Vision("boss_battle\\activate_all_on.png")
+boss_one_star = Vision("boss_battle\\boss_one_star.png")
+stage_melee_of_phantasms = Vision("boss_battle\\stage_melee_of_phantasms.png")
+death_match_vanya = Vision("boss_battle\\death_match_vanya.png")
+boss_battle_loading_screen = Vision("boss_battle\\boss_battle_loading_screen.png")
+
+# Create a single OkVision instance for all OK buttons
+ok_main_button = MultiVision(
+    "ok_buttons\\ok_button.jpg",
+    "ok_buttons\\OK_save_party.png",
+    "ok_buttons\\ok_bird_defeat.png",
+    "ok_buttons\\fb_ok_button.png",
+    "ok_buttons\\ok_pvp_defeat.png",
+    "ok_buttons\\salvage_ok.png",
+    "ok_buttons\\bird_okay.png",
+    "ok_buttons\\finished_fight_ok.png",
+    "ok_buttons\\forfeit_fight_ok.png",
+    "ok_buttons\\demon_ok.jpg",
+    "ok_buttons\\dead_ok.jpg",
+    "ok_buttons\\kicked_ok.png",
+    "ok_buttons\\ok_maintenance.png",
+    image_name="Ok button",
+)

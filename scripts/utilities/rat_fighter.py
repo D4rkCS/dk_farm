@@ -1,0 +1,204 @@
+import time
+
+import numpy as np
+import utilities.vision_images as vio
+from utilities.coordinates import Coordinates
+from utilities.general_fighter_interface import FightingStates, IFighter
+from utilities.rat_fighting_strategies import RatFightingStrategy
+from utilities.rat_utilities import detect_stump_from_screen
+from utilities.utilities import (
+    capture_window,
+    click_im,
+    find,
+    find_and_click,
+)
+
+
+class RatFighter(IFighter):
+
+    # 0, 1 or 2 (left, middle, right). We start in the middle
+    current_stump = -1
+    next_stump = 1
+
+    def fighting_state(self):
+
+        screenshot, window_location = capture_window()
+
+        # In case we've been lazy and it's the first time we're doing Demonic Beast this week...
+        find_and_click(
+            vio.weekly_mission,
+            screenshot,
+            window_location,
+            point_coordinates=Coordinates.get_coordinates("lazy_weekly_bird_mission"),
+        )
+        find_and_click(vio.daily_quest_info, screenshot, window_location)
+
+        # To skip quickly to the rewards when the fight is done
+        find_and_click(vio.creature_destroyed, screenshot, window_location, threshold=0.6)
+
+        if find(vio.defeat, screenshot):
+            # I may have lost though...
+            print("I lost! :(")
+            self.current_state = FightingStates.DEFEAT
+
+        elif find(vio.db_victory, screenshot, threshold=0.7):
+            # Fight is complete
+            print("Fighting complete! Is it true? Double check...")
+            self.current_state = FightingStates.FIGHTING_COMPLETE
+
+        elif (available_card_slots := RatFighter.count_empty_card_slots(screenshot)) > 0:
+            # First, identify if we are fully disabled... If so, restart the fight
+            if available_card_slots >= 3 and self._check_disabled_hand():
+                # We're fully disabled, we need to exit and restart the fight...
+                print("Our hand is fully disabled, let's restart the fight!")
+                self.current_state = FightingStates.EXIT_FIGHT
+                return
+            if RatFightingStrategy.turns_in_f2p2 > 10:
+                print("We've been in F2P2 for too long! I guess we failed... Let's reset")
+                self.current_state = FightingStates.EXIT_FIGHT
+                RatFightingStrategy.turns_in_f2p2 = 0
+                return
+
+            # We see empty card slots, it means its our turn
+            self.available_card_slots = available_card_slots
+            # Update the current phase
+            if self._apply_detected_phase(self._identify_phase(screenshot)):
+                RatFighter.next_stump = 1
+                RatFighter.current_stump = -1
+
+            # Detect rat stump from screen
+            detected = detect_stump_from_screen(screenshot)
+            if detected is not None:
+                RatFighter.next_stump = detected
+
+            # Finally, move to the next state
+            print(f"MY TURN, selecting {available_card_slots} cards...")
+            print(f"Target stump: {RatFighter.next_stump}")
+            self.update_stump(screenshot, window_location)
+            self.current_state = FightingStates.MY_TURN
+
+    def _identify_phase(self, screenshot: np.ndarray):
+        """Read the screenshot and identify the phase we're currently in"""
+        if find(vio.phase_4, screenshot, threshold=0.8):
+            # Phase 4 first, because it can be misread as a 1
+            return 4
+        elif find(vio.phase_2, screenshot, threshold=0.8):
+            return 2
+        elif find(vio.phase_3, screenshot, threshold=0.8):
+            return 3
+
+        return None
+
+    def update_stump(self, screenshot, window_location):
+        """Click on a new stump if applicable, and activate the talent"""
+
+        if RatFighter.next_stump != RatFighter.current_stump:
+            if RatFighter.next_stump == 0:
+                click_im(Coordinates.get_coordinates("left_log"), window_location)
+            elif RatFighter.next_stump == 1:
+                click_im(Coordinates.get_coordinates("middle_log"), window_location)
+            elif RatFighter.next_stump == 2:
+                click_im(Coordinates.get_coordinates("right_log"), window_location)
+            RatFighter.current_stump = RatFighter.next_stump
+            time.sleep(0.5)
+
+        if talent := next(
+            (t for t in (vio.talent_kd, vio.talent_escalin) if find(t, screenshot)),
+            None,
+        ):
+            print(f"Activating {talent.image_name} and waiting...")
+            find_and_click(talent, screenshot, window_location, threshold=0.6, sleep_time=2.5)
+
+    def my_turn_state(self):
+        """State in which the 4 cards will be picked and clicked. Overrides the parent method."""
+        screenshot, _ = capture_window()
+
+        # First, update the current phase
+        self._apply_detected_phase(self._identify_phase(screenshot))
+
+        # Then, play the cards
+        self.play_cards(current_stump=RatFighter.current_stump)
+
+    def _check_disabled_hand(self):
+        """If we have a disabled hand"""
+        screenshot, _ = capture_window()
+        return find(vio.skill_locked, screenshot, threshold=0.6)
+
+    @staticmethod
+    def count_empty_card_slots(screenshot, threshold=0.7):
+        """Ideally used within a fight, count how many empty card slots we have available"""
+        rectangles, _ = vio.empty_card_slot.find_all_rectangles(screenshot, threshold=threshold)
+        # The second one is in case we cannot play ANY card. Then, the empty card slots look different
+        rectangles_2, _ = vio.empty_card_slot_2.find_all_rectangles(screenshot, threshold=0.6)
+
+        return (
+            4
+            if find(vio.skill_locked, screenshot, threshold=0.6)
+            else min(4, rectangles.shape[0] + rectangles_2.shape[0])
+        )
+
+    def exit_fight_state(self):
+        """We have to manually finish the fight because we've been fully disabled."""
+        self._run_manual_forfeit_flow()
+
+    def defeat_state(self):  # sourcery skip: class-extract-method
+        """We've lost the battle..."""
+        screenshot, window_location = capture_window()
+
+        find_and_click(vio.daily_quest_info, screenshot, window_location)
+
+        # Click on the OK button to end the fight
+        find_and_click(vio.ok_main_button, screenshot, window_location)
+
+        if find(vio.db_loading_screen, screenshot) or find(vio.tavern_loading_screen, screenshot):
+            # We're going back to the main bird menu, let's end this thread
+            self.complete_callback(victory=False, phase=IFighter.current_phase)
+            with self._lock:
+                self.exit_thread = True
+
+    def fight_complete_state(self):
+        """We've completed the battle successfully!"""
+
+        screenshot, window_location = capture_window()
+
+        find_and_click(vio.daily_quest_info, screenshot, window_location)
+
+        # Click on the OK button to end the fight
+        find_and_click(vio.ok_main_button, screenshot, window_location)
+
+        # Only consider the fight complete if we see the loading screen, in case we need to click OK multiple times
+        if find(vio.db_loading_screen, screenshot):
+            self.complete_callback(victory=True)
+            with self._lock:
+                self.exit_thread = True
+
+    @IFighter.run_wrapper
+    def run(self, floor_num=1):
+
+        # First, set the floor number
+        IFighter.current_floor = floor_num
+
+        print(f"Fighting very hard on floor {IFighter.current_floor}...")
+
+        while True:
+
+            if self.current_state == FightingStates.FIGHTING:
+                self.fighting_state()
+
+            elif self.current_state == FightingStates.MY_TURN:
+                self.my_turn_state()
+
+            elif self.current_state == FightingStates.FIGHTING_COMPLETE:
+                self.fight_complete_state()
+
+            elif self.current_state == FightingStates.DEFEAT:
+                self.defeat_state()
+
+            elif self.current_state == FightingStates.EXIT_FIGHT:
+                self.exit_fight_state()
+
+            if self.exit_thread:
+                print("Closing Fighter thread!")
+                return
+
+            time.sleep(0.5)

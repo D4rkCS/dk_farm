@@ -1,0 +1,14 @@
+dill
+numpy==1.26.1
+opencv-python
+pillow==11.3.0
+pyautogui
+PyQt5
+pynput
+pytz
+pywin32
+pyyaml
+scikit-learn==1.5.1
+termcolor
+tqdm
+requests
