@@ -3,8 +3,13 @@
 Ciclo infinito de 3 turnos guiado por el estado del talento de DK. Solo se
 mueven cartas para cargar orbes y se juegan las ultimates que van apareciendo.
 Tristan (4to aliado, última posición a la derecha) queda fuera del carrusel:
-el bot no detecta sus orbes ni mueve sus cartas, solo actúa sobre DK, Cusack
-y Galand.
+el bot no mueve sus cartas para cargarle orbes ni lo usa para decidir turnos,
+solo actúa sobre DK, Cusack y Galand. La excepción es la función "Seguro"
+(ver ``_try_seguro``): si el turno anterior no se pudo confirmar que se jugó
+la ultimate correcta y Tristan tiene su propia ulti en mano, se usa esa ulti
+como comodín, se retoman las cartas que quedaron pendientes para no perder el
+ritmo del bucle, y se recarga a Tristan para que el Seguro quede listo de
+nuevo.
 
   Turno A (dk_talento ACTIVO):
     1. Click al talento de DK.
@@ -44,6 +49,7 @@ from utilities.canopus_orb_reader import (
     CHARACTER_NAMES,
     read_ally_orbs,
     read_dk_talent_metrics,
+    read_tristan_orbs,
 )
 from utilities.capture_window import capture_window
 from utilities.card_data import Card, CardTypes
@@ -58,28 +64,34 @@ from utilities.utilities import (
 _IMG_DIR = os.path.join("images", "canopus_dk")
 
 # Templates de cartas por personaje (la ulti es siempre el último nombre).
-# Tristan queda fuera a propósito: el bot no debe mover sus cartas ni leer
-# sus orbes, así que no se le asigna template ni entra en FOCUS_ORDER.
+# Tristan sí se identifica (necesario para detectar su ulti para la función
+# "Seguro"), pero queda fuera de FOCUS_ORDER: el carrusel normal nunca lo
+# elige como objetivo para mover cartas ni cargarle orbes.
 CHAR_TEMPLATES = {
     "dk": ("dk_single", "dk_area", "dk_ulti"),
     "cusack": ("cusack_single", "cusack_orbe", "cusack_ulti"),
     "galand": ("galand_single", "galand_desventaja", "galand_ulti"),
+    "tristan": ("tristan_single", "tristan_area", "tristan_ulti"),
 }
 ULT_TEMPLATES = {
     "dk": "dk_ulti",
     "cusack": "cusack_ulti",
     "galand": "galand_ulti",
+    "tristan": "tristan_ulti",
 }
 # Prioridad en empates: el foco de la estrategia es DK, Cusack y Galand.
+# Tristan queda fuera a propósito (ver CHAR_TEMPLATES).
 FOCUS_ORDER = ("dk", "cusack", "galand")
 
 _MIN_CARD_SCORE = 0.35  # score mínimo para asignar una carta a un personaje
 _MIN_ULT_SCORE = 0.40  # score mínimo para dar por encontrada una ulti en mano
 _ULT_VERIFY_SCORE = 0.32  # umbral (más bajo) para "la ulti sigue en mano" tras el click
+_ULT_SCORE_DROP_MARGIN = 0.20  # caída de score post-click a partir de la cual asumimos que es otra carta
 _MAX_ATTEMPTS = 5  # reintentos de un guion (con btn_reset entre intentos)
 _MOVE_SLEEP = 1.2  # cooldown tras cada movimiento de carta (el juego necesita registrarlo)
-_PRE_CLICK_SLEEP = 1.0  # cooldown antes de clickear una carta (p. ej. la ultimate)
-_ULT_SLEEP = 1.5  # espera tras jugar una ultimate
+_PRE_CLICK_SLEEP = 0.3  # cooldown antes de clickear la ulti (reintentos seguidos y rápidos)
+_ULT_SLEEP = 0.6  # espera tras el doble click de la ultimate
+_ULT_DOUBLE_CLICK_GAP = 0.08  # separación entre los dos clicks del doble click de la ulti
 _TALENT_SLEEP = 2.5  # espera tras click al talento
 _POST_TALENT_SLEEP = 1.0  # cooldown extra tras confirmar el talento, antes de empezar a mover cartas
 
@@ -123,6 +135,9 @@ class CanopusCarouselStrategy(IBattleStrategy):
     def __init__(self):
         # Etapa esperada para el próximo turno desactivado: "B", "C" o None (esperar A/inferir).
         self._next_stage: str | None = None
+        # [(personaje, cartas_pendientes), ...] cuando el turno anterior no pudo
+        # confirmar su ultimate; lo consume la función "Seguro" (_try_seguro).
+        self._pending_recovery: list[tuple[str, int]] | None = None
 
     # ── Verificaciones ──
 
@@ -171,10 +186,14 @@ class CanopusCarouselStrategy(IBattleStrategy):
         match: las cartas normales de un personaje pueden matchear su template
         de ulti como match secundario (p. ej. cusack_single da ~0.43 contra
         cusack_ulti) y eso produciría falsos positivos.
+
+        Solo considera personajes de FOCUS_ORDER: la ulti de Tristan NUNCA se
+        juega por este camino (turno normal), solo mediante la función
+        "Seguro" (``_try_seguro``), que la busca explícitamente.
         """
         best_card, best_char, best_score = None, None, 0.0
         for _idx, card, char, tpl, score in self._hand_snapshot():
-            if char is None or tpl != ULT_TEMPLATES[char]:
+            if char is None or char not in FOCUS_ORDER or tpl != ULT_TEMPLATES[char]:
                 continue
             if score > best_score:
                 best_card, best_char, best_score = card, char, score
@@ -339,31 +358,162 @@ class CanopusCarouselStrategy(IBattleStrategy):
 
     def _play_ult(self) -> bool:
         """Juega la mejor ultimate de la mano, verificando que desaparece tras el click."""
-        card, char, score = self._find_ult_in_hand()
+        card, char, orig_score = self._find_ult_in_hand()
         if card is None:
-            print(f"No hay ultimate reconocible en la mano (mejor score {score:.2f}).")
+            print(f"No hay ultimate reconocible en la mano (mejor score {orig_score:.2f}).")
             return False
+        return self._play_specific_ult(char, orig_score)
 
+    def _play_specific_ult(self, char: str, orig_score: float) -> bool:
+        """Juega la carta de ulti de ``char``, verificando el click.
+
+        Re-ubica la carta (posición fresca, vía ``_char_ult_in_hand``) recién
+        después de la espera previa al click, nunca antes: identificar cartas
+        es lento (varios ``cv2.matchTemplate`` por carta) y en una laptop
+        lenta ese tiempo alcanza para que la mano se reacomode, dejando
+        desactualizada una posición calculada de antemano y haciendo que el
+        click caiga en otra carta. Por eso no se reutiliza el ``Card`` de
+        ``_find_ult_in_hand``/la iteración anterior: siempre se vuelve a
+        buscar la carta justo antes de cada click.
+
+        Si la carta ya no está, o su score cayó demasiado respecto al
+        original (una carta nueva puede matchear el mismo template por
+        casualidad, con un score mucho más bajo — visto en vivo: 0.87 -> 0.58
+        -> 0.36), se da por jugada la ulti en vez de seguir clickeando algo
+        que ya no es la misma carta.
+
+        Cada intento hace DOBLE click (un solo click a veces no alcanza a
+        registrarse) y los reintentos van seguidos y rápidos (``_PRE_CLICK_SLEEP``
+        y ``_ULT_SLEEP`` cortos): mejor varios intentos rápidos sobre la
+        posición recién verificada que esperar de más entre cada uno.
+        """
         for attempt in range(1, _MAX_ATTEMPTS + 1):
-            _, window_location = capture_window()
             time.sleep(_PRE_CLICK_SLEEP)
-            print(f"Jugando la ultimate de {char} (score {score:.2f}, intento {attempt}/{_MAX_ATTEMPTS}).")
-            click_im(card.rectangle, window_location)
-            time.sleep(_ULT_SLEEP)
 
-            # Verificar que la ultimate ya no está en la mano (el click pudo perderse)
             card, score = self._char_ult_in_hand(char)
             if card is None:
-                print(f"Verificado: la ultimate de {char} desapareció de la mano.")
+                print(f"Verificado: la ultimate de {char} ya no está en la mano.")
                 return True
-            print(f"La ultimate de {char} sigue en la mano (score {score:.2f}); reintento el click.")
+            if score < orig_score - _ULT_SCORE_DROP_MARGIN:
+                print(
+                    f"El match de la ultimate de {char} cayó de {orig_score:.2f} a {score:.2f}; "
+                    "asumo que ya se jugó y no clickeo otra carta."
+                )
+                return True
+
+            _, window_location = capture_window()
+            print(f"Jugando la ultimate de {char} (score {score:.2f}, intento {attempt}/{_MAX_ATTEMPTS}, doble click).")
+            click_im(card.rectangle, window_location)
+            time.sleep(_ULT_DOUBLE_CLICK_GAP)
+            click_im(card.rectangle, window_location)
+            time.sleep(_ULT_SLEEP)
 
         print(f"No pude confirmar que la ultimate de {char} se jugara tras {_MAX_ATTEMPTS} clicks.")
         return False
 
-    def _char_by_orbs(self, orbs: list[int], predicate, label: str) -> int | None:
-        """Índice del personaje cuyo conteo cumple ``predicate``; empates por FOCUS_ORDER."""
-        matching = [i for i, count in enumerate(orbs) if predicate(count)]
+    # ── Función "Seguro" ──
+
+    def _try_seguro(self) -> bool:
+        """Red de contención: usa la ulti de Tristan como comodín si el turno
+        anterior no se pudo confirmar la ultimate correcta.
+
+        Se dispara UNA sola vez, en el turno siguiente al fallo (por eso
+        consume ``_pending_recovery`` de entrada, se cumpla o no la
+        condición): si la carta de ulti de Tristan está en la mano, la juega
+        como comodín, retoma las cartas que habían quedado pendientes, y por
+        último recarga a Tristan (sus propios orbes quedan en 0 al jugar la
+        ulti) para que el Seguro pueda volver a dispararse más adelante. Si su
+        ulti no está en mano ese turno, se deja pasar la recuperación y el
+        turno sigue su curso normal.
+        """
+        pending = self._pending_recovery
+        if not pending:
+            return False
+        self._pending_recovery = None
+
+        tristan_card, tristan_score = self._char_ult_in_hand("tristan")
+        if tristan_card is None:
+            return False
+
+        print(
+            f"[Seguro] Ulti de Tristan en mano (score {tristan_score:.2f}); la uso como comodín."
+        )
+        if not self._play_specific_ult("tristan", tristan_score):
+            print("[Seguro] No pude confirmar la ulti de Tristan; sigo con el turno normal.")
+            return False
+
+        for pending_char, pending_count in pending:
+            print(f"[Seguro] Muevo las {pending_count} cartas pendientes de {pending_char}.")
+            self._move_char_cards(pending_char, pending_count)
+
+        # Al jugar su ulti, los orbes propios de Tristan bajan a 0 (igual que a
+        # cualquier otro personaje). Como el carrusel normal nunca le mueve
+        # cartas, hay que reconstruirle la barra a mano o el Seguro solo
+        # podría dispararse una vez en toda la corrida.
+        recharged = self._recharge_tristan()
+        print(f"[Seguro] Recarga de Tristan: {recharged}/5 cartas movidas.")
+        return True
+
+    def _recharge_tristan(self) -> int:
+        """Mueve hasta 5 cartas de Tristan para reconstruir su barra de orbes
+        tras usar su ulti en el Seguro, verificando cada movimiento contra
+        ``read_tristan_orbs`` (igual de estricto que ``_move_char_cards``,
+        pero contra su lectura separada en vez de la de los 3 aliados del
+        carrusel). Si el hueco de cartas de Tristan en la mano se agota antes
+        de las 5, el resto queda para una futura recarga.
+        """
+        screenshot, _ = capture_window()
+        current = read_tristan_orbs(screenshot)
+        if current is None:
+            print("[Seguro] No puedo leer los orbes de Tristan para recargarlo; no arriesgo el movimiento.")
+            return 0
+
+        moved = 0
+        for _ in range(5):
+            wait_if_paused()
+            snapshot = self._hand_snapshot()
+            own = [(pos, item) for pos, item in enumerate(snapshot) if item[2] == "tristan"]
+            if not own:
+                print("[Seguro] No encuentro cartas de Tristan en la mano para recargarlo.")
+                break
+            own.sort(key=lambda pair: (pair[1][3] == ULT_TEMPLATES["tristan"], -pair[1][4]))
+            origin_pos, (origin_idx, origin_card, _c, _t, score) = own[0]
+            target_card = self._pick_move_target(snapshot, origin_pos)
+            if target_card is None:
+                print("[Seguro] No hay carta objetivo para recargar a Tristan.")
+                break
+            _, window_location = capture_window()
+            origin_point = get_click_point_from_rectangle(origin_card.rectangle)
+            target_point = get_click_point_from_rectangle(target_card.rectangle)
+            print(f"[Seguro] Recargando Tristan: moviendo carta (idx {origin_idx}, score {score:.2f}).")
+            drag_im(origin_point, target_point, window_location, sleep_after_click=0.1, drag_duration=0.25)
+            time.sleep(_MOVE_SLEEP)
+
+            expected = min(5, current + 1)
+            screenshot, _ = capture_window()
+            new_orbs = read_tristan_orbs(screenshot)
+            if new_orbs is None or new_orbs < expected:
+                print(
+                    f"[Seguro] Movimiento de recarga de Tristan no verificado (antes={current}, "
+                    f"después={new_orbs}); corto la recarga."
+                )
+                break
+            current = new_orbs
+            moved += 1
+        return moved
+
+    def _char_by_orbs(
+        self, orbs: list[int], predicate, label: str, exclude: int | None = None
+    ) -> int | None:
+        """Índice del personaje cuyo conteo cumple ``predicate``; empates por FOCUS_ORDER.
+
+        ``exclude`` descarta un índice ya asignado a otro rol del mismo turno,
+        para no devolver el mismo personaje dos veces (p. ej. en Turno B, que
+        necesita un personaje con 3 orbes y OTRO con 0).
+        """
+        matching = [
+            i for i, count in enumerate(orbs) if predicate(count) and i != exclude
+        ]
         if not matching:
             print(f"Ningún personaje cumple: {label}. Orbes: {orbs}")
             return None
@@ -401,20 +551,27 @@ class CanopusCarouselStrategy(IBattleStrategy):
                 current = self._read_orbs_reliable() or current
 
         print("[Turno A] Agotados los intentos; termino el turno como pueda.")
+        self._pending_recovery = [(char, 3)]
         self._next_stage = "B"
 
     def _turn_b(self, orbs: list[int]) -> None:
         print(f"[Turno B] Talento en cooldown (etapa 1). Orbes: {self._orbs_text(orbs)}")
 
         current = orbs
+        char3 = char0 = None
         for attempt in range(1, _MAX_ATTEMPTS + 1):
             idx3 = self._char_by_orbs(current, lambda n: n == 3, "tener 3 orbes")
-            idx0 = self._char_by_orbs(current, lambda n: n == 0, "tener 0 orbes")
             if idx3 is None:
                 idx3 = self._char_by_orbs(current, lambda n: n < 5, "tener menos de 5 orbes (fallback)")
-            if idx0 is None or idx0 == idx3:
+
+            # idx0 siempre excluye a idx3: nunca debe ser el mismo personaje para los dos roles.
+            idx0 = self._char_by_orbs(current, lambda n: n == 0, "tener 0 orbes", exclude=idx3)
+            if idx0 is None:
                 idx0 = self._char_by_orbs(
-                    current, lambda n: n == min(current), "tener los menos orbes (fallback)"
+                    current,
+                    lambda n: n == min(c for i, c in enumerate(current) if i != idx3),
+                    "tener los menos orbes (fallback)",
+                    exclude=idx3,
                 )
             if idx3 is None or idx0 is None:
                 break
@@ -448,6 +605,8 @@ class CanopusCarouselStrategy(IBattleStrategy):
                 current = self._read_orbs_reliable() or current
 
         print("[Turno B] Agotados los intentos; termino el turno como pueda.")
+        if char3 is not None and char0 is not None:
+            self._pending_recovery = [(char3, 2), (char0, 1)]
         self._next_stage = "C"
 
     def _turn_c(self, orbs: list[int]) -> None:
@@ -549,6 +708,13 @@ class CanopusCarouselStrategy(IBattleStrategy):
             f"— Verificaciones: talento={metrics['estado']} (brillo {metrics['brillo']:.0%}, "
             f"vivo {metrics['vivid_fraction']:.0%}) | orbes: {self._orbs_text(orbs)} | ulti en mano: {ult_text}"
         )
+
+        # Si el turno anterior dejó una recuperación pendiente, este turno es su
+        # única oportunidad (ver _try_seguro): si se dispara, reemplaza al guion
+        # normal A/B/C de este turno.
+        if self._try_seguro():
+            self._ensure_turn_finished()
+            return
 
         stage = self._classify_stage(metrics, orbs, has_ult=ult_char is not None)
 
