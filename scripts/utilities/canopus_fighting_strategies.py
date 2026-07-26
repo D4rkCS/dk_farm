@@ -273,7 +273,19 @@ class CanopusCarouselStrategy(IBattleStrategy):
         return candidates[0][1] if candidates else None
 
     def _move_char_cards(self, char: str, times: int) -> int:
-        """Mueve ``times`` cartas del personaje dado. Devuelve cuántos movimientos hizo."""
+        """Mueve hasta ``times`` cartas del personaje dado, verificando cada una.
+
+        Tras cada movimiento comprueba que los orbes de ``char`` subieron en 1
+        (tope 5). Si un movimiento no se puede verificar, corta el bloque de
+        inmediato en vez de seguir moviendo cartas a ciegas: el llamador
+        (con su propio bucle de reintentos) es quien decide resetear y volver
+        a intentar. Devuelve cuántos movimientos quedaron verificados.
+        """
+        idx = CHARACTER_NAMES.index(char)
+        current_orbs = self._read_orbs_reliable()
+        if current_orbs is None:
+            print(f"No puedo leer los orbes antes de mover cartas de {char}; no arriesgo el movimiento.")
+            return 0
         moved = 0
         for _ in range(times):
             wait_if_paused()
@@ -299,6 +311,16 @@ class CanopusCarouselStrategy(IBattleStrategy):
             print(f"Moviendo carta de {char} (idx {origin_idx}, score {score:.2f}).")
             drag_im(origin_point, target_point, window_location, sleep_after_click=0.1, drag_duration=0.25)
             time.sleep(_MOVE_SLEEP)
+
+            expected = min(5, current_orbs[idx] + 1)
+            new_orbs = self._read_orbs_reliable()
+            if new_orbs is None or new_orbs[idx] < expected:
+                print(
+                    f"Movimiento de {char} no verificado (orbes antes={current_orbs}, "
+                    f"después={new_orbs}); corto el bloque para resetear."
+                )
+                break
+            current_orbs = new_orbs
             moved += 1
         return moved
 
@@ -401,7 +423,8 @@ class CanopusCarouselStrategy(IBattleStrategy):
             before3, before0 = current[idx3], current[idx0]
             print(f"[Turno B] 2 movimientos de {char3} ({before3} orbes) y 1 de {char0} ({before0} orbes).")
             moved3 = self._move_char_cards(char3, 2)
-            moved0 = self._move_char_cards(char0, 1)
+            # Si el bloque de char3 ya falló, no arriesgar el de char0: de todas formas el reset lo deshace.
+            moved0 = self._move_char_cards(char0, 1) if moved3 == 2 else 0
 
             after = self._read_orbs_reliable()
             ok = (
@@ -430,32 +453,58 @@ class CanopusCarouselStrategy(IBattleStrategy):
     def _turn_c(self, orbs: list[int]) -> None:
         print(f"[Turno C] Talento en cooldown (etapa 2). Orbes: {self._orbs_text(orbs)} — sin ultimate.")
 
-        idx1 = self._char_by_orbs(orbs, lambda n: n == 1, "tener 1 orbe")
-        if idx1 is None:
-            idx1 = self._char_by_orbs(orbs, lambda n: n == min(orbs), "tener los menos orbes (fallback)")
-        if idx1 is not None:
-            char = CHARACTER_NAMES[idx1]
-            print(f"[Turno C] Moviendo 4 cartas de {char} ({orbs[idx1]} orbes).")
-            self._move_char_cards(char, 4)
+        current = orbs
+        for attempt in range(1, _MAX_ATTEMPTS + 1):
+            idx1 = self._char_by_orbs(current, lambda n: n == 1, "tener 1 orbe")
+            if idx1 is None:
+                idx1 = self._char_by_orbs(current, lambda n: n == min(current), "tener los menos orbes (fallback)")
+            if idx1 is None:
+                print("[Turno C] No encuentro personaje para mover.")
+                break
 
+            char = CHARACTER_NAMES[idx1]
+            print(f"[Turno C] Moviendo 4 cartas de {char} ({current[idx1]} orbes).")
+            moved = self._move_char_cards(char, 4)
+            if moved == 4:
+                print(f"[Turno C] Verificado: 4 movimientos de {char} completados.")
+                self._next_stage = None
+                return
+            print(f"[Turno C] Verificación fallida (movidas {moved}/4 de {char}).")
+
+            if attempt < _MAX_ATTEMPTS:
+                self._press_reset()
+                current = self._read_orbs_reliable() or current
+
+        print("[Turno C] Agotados los intentos; termino el turno como pueda.")
         # Cierra el ciclo: el siguiente turno debería volver a tener el talento ACTIVO.
         self._next_stage = None
 
     def _filler_turn(self, orbs: list[int] | None) -> None:
         """Sin señal clara del ciclo: mover cartas del personaje con menos orbes para no estancarse."""
         print("[Turno ?] Sin señal clara del ciclo; muevo cartas del personaje con menos orbes.")
-        if orbs is None:
-            orbs = [0] * len(CHARACTER_NAMES)
-        target = min(range(len(orbs)), key=lambda i: (orbs[i], FOCUS_ORDER.index(CHARACTER_NAMES[i])))
-        self._move_char_cards(CHARACTER_NAMES[target], 2)
+        current = orbs if orbs is not None else [0] * len(CHARACTER_NAMES)
+        for attempt in range(1, _MAX_ATTEMPTS + 1):
+            target = min(range(len(current)), key=lambda i: (current[i], FOCUS_ORDER.index(CHARACTER_NAMES[i])))
+            char = CHARACTER_NAMES[target]
+            moved = self._move_char_cards(char, 2)
+            if moved == 2:
+                return
+            print(f"[Turno ?] Verificación fallida (movidas {moved}/2 de {char}).")
+            if attempt < _MAX_ATTEMPTS:
+                self._press_reset()
+                current = self._read_orbs_reliable() or current
+
+        print("[Turno ?] Agotados los intentos; sigo sin poder mover cartas de forma segura.")
 
     def _ensure_turn_finished(self) -> None:
         """Rellenar los slots que falten con movimientos del personaje con menos orbes.
 
-        Si no encuentra cartas de ese personaje para mover, no hace ningún
-        movimiento a ciegas: prefiere dejar el turno como esté a arriesgar una
-        jugada al azar.
+        Cada movimiento se verifica (ver ``_move_char_cards``); si uno falla,
+        resetea y reintenta en la siguiente ronda en vez de arriesgar una
+        jugada al azar. Si tras ``_MAX_ATTEMPTS`` rondas seguidas fallidas
+        seguimos sin poder mover nada, se deja el turno como esté.
         """
+        failed_in_a_row = 0
         for _ in range(6):
             wait_if_paused()
             if self._empty_slots() == 0:
@@ -463,8 +512,14 @@ class CanopusCarouselStrategy(IBattleStrategy):
             orbs = self._read_orbs_reliable() or [0] * len(CHARACTER_NAMES)
             target = min(range(len(orbs)), key=lambda i: (orbs[i], FOCUS_ORDER.index(CHARACTER_NAMES[i])))
             if self._move_char_cards(CHARACTER_NAMES[target], 1) == 0:
-                print("No encuentro cartas para completar el turno; no arriesgo un movimiento al azar.")
-                return
+                failed_in_a_row += 1
+                if failed_in_a_row >= _MAX_ATTEMPTS:
+                    print("No pude completar el turno tras varios intentos; no arriesgo un movimiento al azar.")
+                    return
+                print("Movimiento de relleno no verificado; reseteo y reintento.")
+                self._press_reset()
+            else:
+                failed_in_a_row = 0
             time.sleep(0.4)
 
     @staticmethod
