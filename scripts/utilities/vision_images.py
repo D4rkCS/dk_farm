@@ -437,6 +437,23 @@ skuld_st = Vision("demon_king\\skuld_st.png")
 # Empty card slots
 dk_empty_slot = Vision("demon_king\\empty_slot.png")
 
+# Estrategia Canopus (carrusel de 4 aliados sobre Demon King) — templates de
+# carta por personaje, usados por canopus_fighting_strategies.py para
+# identificar de quién es cada carta en mano.
+canopus_dk_single = Vision("canopus_dk\\dk_single.png")
+canopus_dk_area = Vision("canopus_dk\\dk_area.png")
+canopus_dk_ulti = Vision("canopus_dk\\dk_ulti.png")
+canopus_cusack_single = Vision("canopus_dk\\cusack_single.png")
+canopus_cusack_orbe = Vision("canopus_dk\\cusack_orbe.png")
+canopus_cusack_ulti = Vision("canopus_dk\\cusack_ulti.png")
+canopus_galand_single = Vision("canopus_dk\\galand_single.png")
+canopus_galand_desventaja = Vision("canopus_dk\\galand_desventaja.png")
+canopus_galand_ulti = Vision("canopus_dk\\galand_ulti.png")
+canopus_tristan_single = Vision("canopus_dk\\tristan_single.png")
+canopus_tristan_area = Vision("canopus_dk\\tristan_area.png")
+canopus_tristan_ulti = Vision("canopus_dk\\tristan_ulti.png")
+canopus_btn_reset = Vision("canopus_dk\\btn_reset.png")
+
 # For dailies
 auto_salvage = Vision("dailies\\auto_salvage.png")
 go_now = Vision("dailies\\go_now.png")

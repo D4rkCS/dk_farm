@@ -1,9 +1,11 @@
 """Estrategia Canopus — carrusel de ultimates guiado por el talento de DK.
 
-Al darle START, el bot entra directamente a la arquitectura fighter + strategy
-(sin capa de farmer): espera a que sea nuestro turno (cartas en mano) y ejecuta
+Al darle START, el bot arranca directamente en la pelea (sin navegación de
+menús: la pelea de Demon King con el equipo Canopus se entra a mano) y ejecuta
 el ciclo A/B/C del carrusel (ver utilities/canopus_fighting_strategies.py).
-Al terminar una pelea cierra el resultado, reporta y espera la siguiente.
+Usa la misma infraestructura de farmer que el resto de las estrategias
+(login, dailies, botón Update de la GUI, detección de "bot atascado", etc.)
+vía ``utilities/canopus_farming_logic.py`` + ``FarmingFactory``.
 
 Modo diagnóstico: ``python EstrategiaCanopus.py --monitor`` no juega nada y
 solo reporta orbes + estado del talento (el modo que usamos para calibrar).
@@ -13,44 +15,10 @@ import argparse
 import time
 
 from utilities.app_config import wait_if_paused
-from utilities.canopus_fighter import CanopusFighter
-from utilities.canopus_fighting_strategies import CanopusCarouselStrategy
+from utilities.canopus_farming_logic import CanopusFarmer, States
 from utilities.canopus_orb_reader import CHARACTER_NAMES, read_ally_orbs, read_dk_talent
 from utilities.capture_window import capture_window
-
-
-class _SessionStats:
-    wins = 0
-    losses = 0
-
-
-def _fight_complete(victory=False, **kwargs):
-    if victory:
-        _SessionStats.wins += 1
-        print("¡PELEA GANADA!")
-        print("[CLEAR]")
-    else:
-        _SessionStats.losses += 1
-        phase = kwargs.get("phase")
-        print(f"Pelea perdida{f' en fase {phase}' if phase is not None else ''}...")
-        print("[LOSS]")
-
-    total = _SessionStats.wins + _SessionStats.losses
-    print(f"Resultados de la sesión: {_SessionStats.wins}/{total} victorias.")
-
-
-def run_strategy():
-    print("Estrategia Canopus (carrusel) iniciada. Entra a la pelea; actuaré cuando sea tu turno.")
-
-    while True:
-        fighter = CanopusFighter(
-            battle_strategy=CanopusCarouselStrategy,
-            callback=_fight_complete,
-        )
-        fighter.run()
-
-        # Pequeña pausa antes de buscar la siguiente pelea
-        time.sleep(3)
+from utilities.farming_factory import FarmingFactory
 
 
 def run_monitor():
@@ -90,6 +58,15 @@ def run_monitor():
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--password", "-p", type=str, default=None, help="Account password")
+    parser.add_argument("--clears", type=str, default="inf", help="How many total clears")
+    parser.add_argument("--do-dailies", action="store_true", default=False, help="Do dailies (default: False)")
+    parser.add_argument(
+        "--daily-pvp",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Do daily PVP when dailies run (default: True)",
+    )
     parser.add_argument(
         "--monitor",
         action="store_true",
@@ -100,8 +77,17 @@ def main():
 
     if args.monitor:
         run_monitor()
-    else:
-        run_strategy()
+        return
+
+    FarmingFactory.main_loop(
+        farmer=CanopusFarmer,
+        battle_strategy=None,  # Canopus siempre usa CanopusCarouselStrategy internamente
+        starting_state=States.FIGHTING,
+        max_runs=args.clears,
+        password=args.password,
+        do_dailies=args.do_dailies,
+        do_daily_pvp=args.daily_pvp,
+    )
 
 
 if __name__ == "__main__":
