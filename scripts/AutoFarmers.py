@@ -425,7 +425,6 @@ REQUIREMENTS = {
 <p><em>Esta estrategia fue diseñada por <strong>Lider-OLasky de Raykaru</strong>.</em></p>
 <p><strong>Se necesita saber lo siguiente:</strong><br>
 • El orden de los personajes es OBLIGATORIO: Rey Demonio, Cusack, Galand y Tristan.<br>
-• El bot no mueve las cartas de Tristan ni lo usa en el carrusel normal (solo actúa sobre Rey Demonio, Cusack y Galand).<br>
 • Recuerden usar comida de recovery y Galand full recovery.<br>
 • Utilicen el set que te cura cuando el enemigo te tira una ulti.<br>
 • Úsenlo bajo su propio riesgo.</p>
