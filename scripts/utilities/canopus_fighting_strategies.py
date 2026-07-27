@@ -574,11 +574,16 @@ class CanopusCarouselStrategy(IBattleStrategy):
                 print("[Seguro] Sin slots vacíos; corto la recarga de Tristan por este turno.")
                 break
             snapshot = self._hand_snapshot()
-            tristan_cards = [(pos, item) for pos, item in enumerate(snapshot) if item[2] == "tristan"]
-            if any(item[3] == ULT_TEMPLATES["tristan"] for _pos, item in tristan_cards):
-                print("[Seguro] La ulti de Tristan ya está en la mano; doy la recarga por completa.")
-                break
-            own = tristan_cards
+            # Su carta de ulti se EXCLUYE como origen (arrastrarla no la
+            # mueve y deja la recarga girando en falso), pero verla en la
+            # mano NO da la recarga por completa: la única señal válida de
+            # barra llena son los 5 orbes leídos, no un match de template
+            # (puede ser un falso positivo).
+            own = [
+                (pos, item)
+                for pos, item in enumerate(snapshot)
+                if item[2] == "tristan" and item[3] != ULT_TEMPLATES["tristan"]
+            ]
             if not own:
                 print("[Seguro] No encuentro cartas de Tristan en la mano para recargarlo.")
                 break
@@ -631,12 +636,13 @@ class CanopusCarouselStrategy(IBattleStrategy):
         print("[Seguro] Fase de recarga: este turno solo muevo cartas de Tristan.")
         self._recharge_tristan()
 
+        # La ÚNICA señal que cierra el Seguro son los 5 orbes de Tristan
+        # leídos de su barra. Ver su carta de ulti en la mano NO cuenta
+        # (un match de template puede ser un falso positivo y cerraría la
+        # recarga antes de tiempo, dejando al Seguro sin comodín real).
         screenshot, _ = capture_window()
         tristan_orbs = read_tristan_orbs(screenshot)
         tristan_full = tristan_orbs is not None and tristan_orbs >= 5
-        if not tristan_full:
-            # Su ulti en mano equivale a barra llena, aunque la lectura falle.
-            tristan_full = self._char_ult_in_hand("tristan")[0] is not None
         if tristan_full:
             print("[Seguro] Verificado: Tristan volvió a sus 5 orbes. Paso el turno con sus cartas y desactivo el Seguro.")
             self._seguro_recharging = False
