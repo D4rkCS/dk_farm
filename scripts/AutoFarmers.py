@@ -20,6 +20,7 @@ import ctypes.wintypes
 import datetime
 import os
 import re
+import subprocess
 import sys
 import time
 from dataclasses import dataclass
@@ -29,6 +30,7 @@ from PyQt5.QtCore import (
     QProcess,
     QProcessEnvironment,
     Qt,
+    QThread,
     QTimer,
     QUrl,
     pyqtSignal,
@@ -179,6 +181,79 @@ def _restart_application() -> bool:
     if isinstance(started, tuple):
         return started[0]
     return bool(started)
+
+
+# ── Update button: check/pull from the GitHub repo ──
+
+_REPO_DIR = os.path.dirname(_BASE_DIR)  # scripts/.. -> repo root
+_GIT_BRANCH = "master"
+
+# En Windows, subprocess abre una consola visible por default para procesos
+# sin ventana propia (como git.exe); CREATE_NO_WINDOW la evita.
+_NO_WINDOW_FLAGS = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+
+
+def _run_git(args: list[str], timeout: int = 30) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["git", *args],
+        cwd=_REPO_DIR,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        creationflags=_NO_WINDOW_FLAGS,
+    )
+
+
+def _check_for_git_updates() -> tuple[bool, str]:
+    """(hay_actualizacion, mensaje). Nunca lanza: cualquier error se devuelve como mensaje."""
+    try:
+        fetch = _run_git(["fetch", "origin", _GIT_BRANCH], timeout=20)
+        if fetch.returncode != 0:
+            return False, f"No se pudo revisar actualizaciones: {fetch.stderr.strip()}"
+
+        local = _run_git(["rev-parse", "HEAD"]).stdout.strip()
+        remote = _run_git(["rev-parse", f"origin/{_GIT_BRANCH}"]).stdout.strip()
+        if not local or not remote or local == remote:
+            return False, "Ya estás al día."
+
+        count = _run_git(["rev-list", "--count", f"{local}..{remote}"]).stdout.strip()
+        n = int(count) if count.isdigit() else None
+        plural = "s" if n != 1 else ""
+        detail = f" ({n} commit{plural} nuevo{plural})" if n is not None else ""
+        return True, f"Hay una actualización disponible{detail}."
+    except Exception as e:
+        return False, f"No se pudo revisar actualizaciones: {e}"
+
+
+def _pull_git_updates() -> tuple[bool, str]:
+    """(ok, mensaje). Fast-forward only: si no puede, falla limpio en vez de mergear/pisar cambios locales."""
+    try:
+        result = _run_git(["pull", "--ff-only", "origin", _GIT_BRANCH], timeout=60)
+        if result.returncode == 0:
+            return True, result.stdout.strip() or "Actualizado correctamente."
+        return False, (result.stderr or result.stdout).strip() or "git pull falló sin más detalle."
+    except Exception as e:
+        return False, str(e)
+
+
+class _GitCheckWorker(QThread):
+    """Revisa en background (sin trabar la GUI) si hay commits nuevos en el remoto."""
+
+    result_ready = pyqtSignal(bool, str)
+
+    def run(self):
+        has_update, message = _check_for_git_updates()
+        self.result_ready.emit(has_update, message)
+
+
+class _GitPullWorker(QThread):
+    """Corre 'git pull' en background (sin trabar la GUI)."""
+
+    result_ready = pyqtSignal(bool, str)
+
+    def run(self):
+        ok, message = _pull_git_updates()
+        self.result_ready.emit(ok, message)
 
 
 _ACTIVE_THEME = _load_theme()
@@ -1940,6 +2015,20 @@ _BTN_TOP_STYLE = f"""
     QPushButton:pressed {{ background: {C['btn_sec_bg']}; border-color: {C['accent']}; }}
 """
 
+_BTN_TOP_STYLE_UPDATE_AVAILABLE = f"""
+    QPushButton {{
+        background: {C['warning']};
+        border: 1px solid {C['warning']};
+        border-radius: 6px;
+        color: white;
+        padding: 6px 16px;
+        font-size: 13px;
+        font-weight: 600;
+    }}
+    QPushButton:hover {{ background: {C['warning']}; border-color: {C['accent_light']}; }}
+    QPushButton:pressed {{ background: {C['warning']}; }}
+"""
+
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -1998,6 +2087,16 @@ class MainWindow(QMainWindow):
         self._theme_btn.setStyleSheet(_BTN_TOP_STYLE)
         self._theme_btn.clicked.connect(self._toggle_theme)
         top_lay.addWidget(self._theme_btn)
+
+        self._update_btn = QPushButton("⬆ Update")
+        self._update_btn.setStyleSheet(_BTN_TOP_STYLE)
+        self._update_btn.setToolTip("Revisar y descargar cambios del repositorio")
+        self._update_btn.clicked.connect(self._on_update_clicked)
+        top_lay.addWidget(self._update_btn)
+        self._git_check_worker: _GitCheckWorker | None = None
+        self._git_pull_worker: _GitPullWorker | None = None
+        # Revisar actualizaciones poco después de abrir, sin trabar el arranque.
+        QTimer.singleShot(1500, self._check_for_updates)
 
         settings_btn = QPushButton("⚙ Settings")
         settings_btn.setStyleSheet(_BTN_TOP_STYLE)
@@ -2081,6 +2180,72 @@ class MainWindow(QMainWindow):
             self.stack.setCurrentWidget(self.settings_wrapper)
         else:
             self._show_grid()
+
+    def _check_for_updates(self):
+        """Revisa en background si hay commits nuevos en el repositorio; no bloquea la GUI."""
+        if self._git_check_worker is not None and self._git_check_worker.isRunning():
+            return
+        worker = _GitCheckWorker(self)
+        worker.result_ready.connect(self._on_update_check_result)
+        self._git_check_worker = worker
+        worker.start()
+
+    def _on_update_check_result(self, has_update: bool, message: str):
+        if has_update:
+            self._update_btn.setText("⬆ Update ●")
+            self._update_btn.setStyleSheet(_BTN_TOP_STYLE_UPDATE_AVAILABLE)
+            self._update_btn.setToolTip(message)
+            QMessageBox.information(
+                self,
+                "Actualización disponible",
+                f"{message}\n\nApretá 'Update' para sincronizar con el repositorio.",
+            )
+        else:
+            self._update_btn.setText("⬆ Update")
+            self._update_btn.setStyleSheet(_BTN_TOP_STYLE)
+            self._update_btn.setToolTip(message)
+
+    def _on_update_clicked(self):
+        if self._any_farmer_running():
+            QMessageBox.information(
+                self,
+                "Actualización bloqueada",
+                "Detené todos los bots antes de actualizar.",
+            )
+            return
+        if self._git_pull_worker is not None and self._git_pull_worker.isRunning():
+            return
+        self._update_btn.setEnabled(False)
+        self._update_btn.setText("Actualizando…")
+        worker = _GitPullWorker(self)
+        worker.result_ready.connect(self._on_update_pull_result)
+        self._git_pull_worker = worker
+        worker.start()
+
+    def _on_update_pull_result(self, ok: bool, message: str):
+        self._update_btn.setEnabled(True)
+        self._update_btn.setText("⬆ Update")
+        self._update_btn.setStyleSheet(_BTN_TOP_STYLE)
+        if not ok:
+            QMessageBox.critical(
+                self,
+                "Actualización fallida",
+                f"No se pudo actualizar:\n\n{message}",
+            )
+            return
+        QMessageBox.information(
+            self,
+            "Actualización completa",
+            f"{message}\n\nLa aplicación se va a reiniciar para aplicar los cambios.",
+        )
+        if not _restart_application():
+            QMessageBox.critical(
+                self,
+                "No se pudo reiniciar",
+                "Se actualizó el código, pero no pude reabrir la GUI automáticamente. Cerrala y abrila de nuevo a mano.",
+            )
+            return
+        QApplication.instance().quit()
 
     def _toggle_theme(self):
         if self._any_farmer_running():

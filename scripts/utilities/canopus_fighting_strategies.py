@@ -358,6 +358,14 @@ class CanopusCarouselStrategy(IBattleStrategy):
 
             expected = min(5, current_orbs[idx] + 1)
             new_orbs = self._read_orbs_reliable()
+            if new_orbs is not None and new_orbs[idx] < current_orbs[idx]:
+                # Un movimiento nunca puede BAJAR un orbe; una lectura que
+                # muestra eso es casi seguro una animación tapando la barra en
+                # el instante de la captura, no un movimiento real. Antes de
+                # dar el bloque por fallido (y disparar un reset en cascada),
+                # reconfirmar con una lectura fresca.
+                time.sleep(0.5)
+                new_orbs = self._read_orbs_reliable()
             if new_orbs is None or new_orbs[idx] < expected:
                 print(
                     f"Movimiento de {char} no verificado (orbes antes={current_orbs}, "
@@ -517,6 +525,12 @@ class CanopusCarouselStrategy(IBattleStrategy):
             expected = min(5, current + 1)
             screenshot, _ = capture_window()
             new_orbs = read_tristan_orbs(screenshot)
+            if new_orbs is not None and new_orbs < current:
+                # Igual que en _move_char_cards: un movimiento nunca baja un
+                # orbe; reconfirmar antes de dar el movimiento por fallido.
+                time.sleep(0.5)
+                screenshot, _ = capture_window()
+                new_orbs = read_tristan_orbs(screenshot)
             if new_orbs is None or new_orbs < expected:
                 print(
                     f"[Seguro] Movimiento de recarga de Tristan no verificado (antes={current}, "
