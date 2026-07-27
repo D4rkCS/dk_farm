@@ -317,9 +317,9 @@ def read_ally_orbs(screenshot: np.ndarray) -> list[int] | None:
 
 # Offset del slot de Tristan (4ta posición) respecto al slot 0, el mismo que
 # tenía la formación de 4 antes de excluirlo del carrusel. Tristan no
-# participa de ``read_ally_orbs``, pero la función "Seguro" de
-# canopus_fighting_strategies.py necesita poder leer su barra de orbes por
-# separado para decidir si usar su ulti como comodín.
+# participa de ``read_ally_orbs``; ``read_tristan_orbs`` lee su barra de
+# orbes por separado para scripts que sí necesiten seguirlo (no lo usa el
+# carrusel principal en canopus_fighting_strategies.py).
 _TRISTAN_OFFSET = (381, 24)
 
 

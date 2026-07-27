@@ -35,15 +35,12 @@ class CanopusFighter(IFighter):
             self.current_state = FightingStates.EXIT_FIGHT
 
         elif (available_card_slots := self.count_empty_card_slots(screenshot)) > 0:
-            # La mano siempre está visible; la señal de turno es la fila de slots
-            # vacíos, que desaparece en el turno enemigo. Confirmar con una segunda
-            # lectura para no dispararse en medio de una animación.
-            time.sleep(0.5)
-            screenshot, _ = capture_window()
-            confirmed_slots = self.count_empty_card_slots(screenshot)
-            if confirmed_slots <= 0:
-                return
-            self.available_card_slots = max(available_card_slots, confirmed_slots)
+            # Misma señal de turno que el resto de los fighters (DK, Indura,
+            # Snake, Deer, Rat, Bird, Dogs): slots de carta vacíos visibles =
+            # nuestro turno; sin slots vacíos = turno enemigo. Sin espera ni
+            # doble lectura artificial - el propio ciclo del fighter (cada
+            # 0.7s) ya actúa como el debounce.
+            self.available_card_slots = available_card_slots
             print(f"MY TURN, selecting {self.available_card_slots} cards...")
             self._apply_detected_phase(self._identify_phase(screenshot))
             self.current_state = FightingStates.MY_TURN
@@ -60,32 +57,15 @@ class CanopusFighter(IFighter):
         # talento, movimientos, ultimate y reset).
         if hasattr(self.battle_strategy, "execute_turn"):
             self.battle_strategy.execute_turn()
-            # Igual que los demás fighters: el turno termina cuando la fila de
-            # slots desaparece. Esperar esa señal antes de re-armar la detección,
-            # para no volver a ejecutar el guion en el mismo turno.
-            self._wait_for_turn_end()
+            # Igual que el resto de los fighters (ver ``IFighter.finish_turn``):
+            # en cuanto terminamos de actuar volvemos a FIGHTING sin esperas
+            # artificiales. El siguiente ciclo (0.7s) vuelve a leer los slots:
+            # si siguen vacíos (turno sin completar), ``execute_turn`` lo
+            # detecta vía ``_turn_pending_fill`` y solo rellena lo que falte;
+            # si ya no hay slots, es turno enemigo y no se hace nada.
             self.current_state = FightingStates.FIGHTING
             return
         self.play_cards()
-
-    def _wait_for_turn_end(self, timeout: float = 20.0) -> None:
-        """Esperar a que los slots desaparezcan (turno ejecutado / turno enemigo).
-
-        Si tras ``timeout`` los slots siguen visibles, volvemos a FIGHTING: la
-        detección disparará ``execute_turn`` de nuevo y su lógica de relleno
-        completará los movimientos que falten.
-        """
-        deadline = time.time() + timeout
-        while time.time() < deadline:
-            screenshot, _ = capture_window()
-            if find(vio.ok_main_button, screenshot) or find(vio.defeat, screenshot):
-                self.current_state = FightingStates.EXIT_FIGHT
-                return
-            if self.count_empty_card_slots(screenshot) == 0:
-                print("Turno terminado; esperando el siguiente...")
-                return
-            time.sleep(0.8)
-        print("Los slots siguen visibles tras la espera; reintentaré completar el turno.")
 
     def exit_fight_state(self):
         """Cerrar la pantalla de resultado y reportar el desenlace."""

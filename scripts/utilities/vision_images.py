@@ -453,6 +453,10 @@ canopus_tristan_single = Vision("canopus_dk\\tristan_single.png")
 canopus_tristan_area = Vision("canopus_dk\\tristan_area.png")
 canopus_tristan_ulti = Vision("canopus_dk\\tristan_ulti.png")
 canopus_btn_reset = Vision("canopus_dk\\btn_reset.png")
+# Ícono que aparece brevemente sobre un slot tras un movimiento de carta
+# exitoso (usado por tristan_canopus_fighting_strategies.py para confirmar
+# los movimientos de recarga de Tristan, más confiable que leer sus orbes).
+canopus_slot_movido_exito = Vision("canopus_dk\\slot_movido_exito.png")
 
 # For dailies
 auto_salvage = Vision("dailies\\auto_salvage.png")

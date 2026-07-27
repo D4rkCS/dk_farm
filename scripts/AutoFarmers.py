@@ -187,6 +187,7 @@ def _restart_application() -> bool:
 
 _REPO_DIR = os.path.dirname(_BASE_DIR)  # scripts/.. -> repo root
 _GIT_BRANCH = "master"
+_UPDATE_CHECK_INTERVAL_MS = 20 * 60 * 1000  # revisar actualizaciones cada 20 minutos
 
 # En Windows, subprocess abre una consola visible por default para procesos
 # sin ventana propia (como git.exe); CREATE_NO_WINDOW la evita.
@@ -424,7 +425,7 @@ REQUIREMENTS = {
 <p><em>Esta estrategia fue diseñada por <strong>Lider-OLasky de Raykaru</strong>.</em></p>
 <p><strong>Se necesita saber lo siguiente:</strong><br>
 • El orden de los personajes es OBLIGATORIO: Rey Demonio, Cusack, Galand y Tristan.<br>
-• El bot no mueve las cartas de Tristan ni lo usa en el carrusel normal (solo actúa sobre Rey Demonio, Cusack y Galand); si el turno anterior falla al confirmar una ulti, puede usar la ulti de Tristan como comodín (función "Seguro") si él no lleva sus 5 orbes.<br>
+• El bot no mueve las cartas de Tristan ni lo usa en el carrusel normal (solo actúa sobre Rey Demonio, Cusack y Galand).<br>
 • Recuerden usar comida de recovery y Galand full recovery.<br>
 • Utilicen el set que te cura cuando el enemigo te tira una ulti.<br>
 • Úsenlo bajo su propio riesgo.</p>
@@ -2095,8 +2096,17 @@ class MainWindow(QMainWindow):
         top_lay.addWidget(self._update_btn)
         self._git_check_worker: _GitCheckWorker | None = None
         self._git_pull_worker: _GitPullWorker | None = None
+        # Para no repetir el popup en cada chequeo mientras la misma
+        # actualización siga pendiente (se resetea cuando deja de haber una).
+        self._update_already_notified: bool = False
         # Revisar actualizaciones poco después de abrir, sin trabar el arranque.
         QTimer.singleShot(1500, self._check_for_updates)
+        # Y periódicamente mientras la GUI siga abierta: si alguien deja el
+        # bot corriendo varios días, el repo se puede actualizar en el medio
+        # y sin esto nunca se enteraría hasta reabrir la app.
+        self._update_check_timer = QTimer(self)
+        self._update_check_timer.timeout.connect(self._check_for_updates)
+        self._update_check_timer.start(_UPDATE_CHECK_INTERVAL_MS)
 
         settings_btn = QPushButton("⚙ Settings")
         settings_btn.setStyleSheet(_BTN_TOP_STYLE)
@@ -2195,12 +2205,19 @@ class MainWindow(QMainWindow):
             self._update_btn.setText("⬆ Update ●")
             self._update_btn.setStyleSheet(_BTN_TOP_STYLE_UPDATE_AVAILABLE)
             self._update_btn.setToolTip(message)
-            QMessageBox.information(
-                self,
-                "Actualización disponible",
-                f"{message}\n\nApretá 'Update' para sincronizar con el repositorio.",
-            )
+            # Solo mostrar el popup la primera vez que se detecta esta
+            # actualización: si el usuario lo cierra sin actualizar, no hace
+            # falta interrumpirlo de nuevo cada 20 minutos con lo mismo -el
+            # botón ya queda marcado como recordatorio visual permanente-.
+            if not self._update_already_notified:
+                self._update_already_notified = True
+                QMessageBox.information(
+                    self,
+                    "Actualización disponible",
+                    f"{message}\n\nApretá 'Update' para sincronizar con el repositorio.",
+                )
         else:
+            self._update_already_notified = False
             self._update_btn.setText("⬆ Update")
             self._update_btn.setStyleSheet(_BTN_TOP_STYLE)
             self._update_btn.setToolTip(message)

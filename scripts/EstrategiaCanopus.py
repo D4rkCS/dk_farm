@@ -3,6 +3,13 @@
 Al darle START, el bot arranca directamente en la pelea (sin navegación de
 menús: la pelea de Demon King con el equipo Canopus se entra a mano) y ejecuta
 el ciclo A/B/C del carrusel (ver utilities/canopus_fighting_strategies.py).
+Cada turno, antes de tocar nada del talento de DK, revisa la mano por la
+carta de ulti de Tristan; si no está, el carrusel corre exactamente igual que
+siempre. Si está, es la señal de que el carrusel se rompió y se corre el
+arreglo automático (ver utilities/tristan_canopus_fighting_strategies.py) sin
+que este archivo ni los del carrusel principal tengan que saber nada de esa
+lógica: ``TristanCanopusFarmer``/``TristanCanopusStrategy`` viven aparte y
+solo envuelven al carrusel por herencia.
 Usa la misma infraestructura de farmer que el resto de las estrategias
 (login, dailies, botón Update de la GUI, detección de "bot atascado", etc.)
 vía ``utilities/canopus_farming_logic.py`` + ``FarmingFactory``.
@@ -15,10 +22,11 @@ import argparse
 import time
 
 from utilities.app_config import wait_if_paused
-from utilities.canopus_farming_logic import CanopusFarmer, States
+from utilities.canopus_farming_logic import States
 from utilities.canopus_orb_reader import CHARACTER_NAMES, read_ally_orbs, read_dk_talent
 from utilities.capture_window import capture_window
 from utilities.farming_factory import FarmingFactory
+from utilities.tristan_canopus_farming_logic import TristanCanopusFarmer
 
 
 def run_monitor():
@@ -80,8 +88,8 @@ def main():
         return
 
     FarmingFactory.main_loop(
-        farmer=CanopusFarmer,
-        battle_strategy=None,  # Canopus siempre usa CanopusCarouselStrategy internamente
+        farmer=TristanCanopusFarmer,
+        battle_strategy=None,  # El fighter siempre usa TristanCanopusStrategy (carrusel + arreglo) internamente
         starting_state=States.FIGHTING,
         max_runs=args.clears,
         password=args.password,
